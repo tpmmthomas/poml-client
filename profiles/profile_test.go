@@ -1,7 +1,11 @@
 // A genesis profile controls the ticket weight and work request shape at every node.
 package profiles
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/thomas/poml-node/internal/types"
+)
 
 func TestProfileBoundsAndDigest(t *testing.T) {
 	a, err := Fixture("fixture-a")
@@ -37,5 +41,24 @@ func TestProfileBoundsAndDigest(t *testing.T) {
 	}
 	if _, err := Fixture("../secrets"); err == nil {
 		t.Fatal("accepted unknown bundled profile")
+	}
+}
+
+func TestStage2ProfilesAndProofMode(t *testing.T) {
+	for _, id := range []string{"dummy", "diffusion-small", "gemma3-1b"} {
+		spec, err := Load(id)
+		if err != nil {
+			t.Fatalf("load %s: %v", id, err)
+		}
+		if !spec.AcceptsRandomProof() || spec.BackendName() == "" || spec.Digest() == (types.Hash{}) {
+			t.Fatalf("invalid stage 2 profile %s", id)
+		}
+	}
+	fixture, err := Fixture("fixture-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fixture.AcceptsRandomProof() || fixture.BackendName() != "fixture" {
+		t.Fatal("fixture profile unexpectedly accepts dummy proof")
 	}
 }

@@ -1,5 +1,7 @@
 {
   "id": "fixture-a",
+  "backend": "fixture",
+  "model_ref": "fixture-a",
   "model_digest": "6e8a05b4ec3f1edb111fde4e5336e120b05682ac26bb99487744e25159d97e40",
   "randomness_slots": 1,
   "randomness_bytes": 32,

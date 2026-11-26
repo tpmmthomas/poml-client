@@ -1,0 +1,13 @@
+{
+  "id": "gemma3-1b",
+  "backend": "gemma",
+  "model_ref": "google/gemma-3-1b-it",
+  "model_digest": "42068a6b1a720779e260a8d5396563f5ec11b93304ecfbe32f13cc4a5eb9710b",
+  "randomness_slots": 1,
+  "randomness_bytes": 32,
+  "output_bytes": 4096,
+  "max_tokens": 16,
+  "ticket_weight": 1,
+  "max_runtime_ms": 600000,
+  "certificate_profile": "dummy-random-v1"
+}

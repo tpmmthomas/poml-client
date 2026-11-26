@@ -323,7 +323,11 @@ func (c *Chain) validateBlock(block types.Block, blockID types.Hash, parent type
 	if err != nil || !consensus.TicketWins(winner.TicketHash, threshold) {
 		return errors.New("winner ticket does not meet target")
 	}
-	if err := cryptoutil.Verify(c.genesis.CertificatePublic, winner.Certificate, "certificate", codec.WinnerStatement(block)); err != nil {
+	if c.genesis.Raw.Model.AcceptsRandomProof() {
+		if len(winner.Certificate) == 0 {
+			return errors.New("dummy proof is empty")
+		}
+	} else if err := cryptoutil.Verify(c.genesis.CertificatePublic, winner.Certificate, "certificate", codec.WinnerStatement(block)); err != nil {
 		return fmt.Errorf("winner certificate: %w", err)
 	}
 	return nil

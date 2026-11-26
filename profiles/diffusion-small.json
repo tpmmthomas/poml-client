@@ -1,0 +1,13 @@
+{
+  "id": "diffusion-small",
+  "backend": "diffusion-small",
+  "model_ref": "poml-diffusion-small-v1",
+  "model_digest": "485a35b21d18a9bed5cf29a0f1b12e72b961d8fe16ff4a5cd81feab38f1eb2b4",
+  "randomness_slots": 5,
+  "randomness_bytes": 32,
+  "output_bytes": 64,
+  "steps": 4,
+  "ticket_weight": 1,
+  "max_runtime_ms": 120000,
+  "certificate_profile": "dummy-random-v1"
+}

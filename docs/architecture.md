@@ -25,7 +25,7 @@ user / pomlctl
         |                          |
         | protobuf Unix socket     |
         v                          v
-   pomlworker                 pomlworker
+   pomlworker                 model_worker.py
 ```
 
 ## Node lifecycle
@@ -45,7 +45,9 @@ user / pomlctl
 
 `internal/codec` owns the accepted bytes. `internal/chain` checks a received
 block against its parent state. It validates signatures, prefix and claim
-digests, VRF output, ticket target, fixture certificate and state transitions.
+digests, VRF output, ticket target, the configured certificate policy and state
+transitions. The temporary random-proof policy is profile-visible and
+intentionally weaker than the fixture signature.
 Only after those checks does it store the block and state in Pebble.
 
 The chain stores side branches. A valid block at a greater height becomes the
@@ -72,7 +74,11 @@ remote block.
 `internal/worker` owns the protobuf request and response framing. The fixture
 worker hashes the supplied profile, query, attempt, input and public
 randomness. Its certificate operation signs the complete public winner
-statement with the genesis test key.
+statement with the genesis test key. The Python Stage 2 worker implements the
+same request shape and returns deterministic dummy or model output. Its current
+certificate operation emits random bytes only for the explicit development
+profile. A future proof worker can replace that operation without changing the
+Go node's model dispatch path.
 
 The node never asks the worker for the current tip. Every request includes the
 parent, prefix digest, query, attempt and prescribed randomness. A later model

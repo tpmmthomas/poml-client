@@ -1,15 +1,16 @@
-# PoML Stage 1 node
+# PoML distributed client
 
-`poml-node` is a fresh Go implementation of the distributed Stage 1 PoML
-client. Every node process owns its key material, local database, mempool,
-peer connections, worker connection, mining loop and event ledger. The test
-network uses a deterministic fixture worker. A later model or proof worker can
-use the same protobuf boundary.
+`poml-node` is a fresh Go implementation of the distributed PoML client.
+Every node process owns its key material, local database, mempool, peer
+connections, worker connection, mining loop and event ledger. The Stage 1
+fixture worker remains available, and the Stage 2 Python worker can run the
+dummy, small diffusion and Gemma profiles through the same protobuf boundary.
 
 Stage 1 measures node, network, storage, cryptographic plumbing and ledger
 behaviour. The certificate returned by the fixture worker is an Ed25519 test
-certificate. It exercises the future proof boundary and carries no claim about
-model correctness or zero knowledge.
+certificate. Stage 2 adds model execution and an explicitly insecure random
+proof mode for plumbing tests. Neither temporary certificate mode proves model
+correctness or zero knowledge.
 
 ## Quick start
 
@@ -25,6 +26,11 @@ go test ./...
 go build ./cmd/...
 ```
 
+The bootstrap script also creates `.venv` and installs the pinned PyTorch,
+Transformers, Diffusers and protobuf packages used by Stage 2. Set
+`POML_SKIP_PYTHON=1` when only the Go client is needed. GPU runs require a
+working CUDA installation and use only `cuda:0`.
+
 Create a three-node local network. The command writes independent node keys,
 the common genesis file, worker socket paths, user keys and a manifest.
 
@@ -32,6 +38,13 @@ the common genesis file, worker socket paths, user keys and a manifest.
 go run ./cmd/pomlctl init-devnet --dir run/devnet --nodes 3
 ./scripts/run_devnet.sh run/devnet
 ```
+
+Pass `--model dummy`, `--model diffusion-small` or `--model gemma3-1b` to
+select a Stage 2 profile. `dummy` is the easiest first run. The small
+diffusion profile is self-contained. The Gemma profile needs an authorized
+local or Hugging Face checkpoint, so set `POML_MODEL_REF=/path/to/checkpoint`
+for a devnet or use the Python worker's `--model-ref` option and benchmark
+script when the default gated checkpoint is unavailable.
 
 Submit a signed query through node 0. The query is relayed to the other nodes,
 and any miner can select it after its ordinary transaction prefix is frozen.
@@ -97,6 +110,8 @@ Each implementation area has a short local README.
 | `cmd/pomld` | Long-running node daemon. |
 | `cmd/pomlctl` | Devnet creation, signed query submission, RPC inspection and decryption. |
 | `cmd/pomlworker` | Separate deterministic inference and certificate fixture. |
+| `stage2/model_worker.py` | Python worker for dummy, small diffusion and Gemma model profiles. |
+| `scripts/benchmark_stage2.py` | Constrained model load, timing, memory and device benchmark. |
 | `api/proto` | Versioned protobuf wire and worker messages. |
 | `internal/chain` | Block validation, branch storage and fork choice. |
 | `internal/codec` | Canonical transaction, block, ticket and statement bytes. |
@@ -161,9 +176,18 @@ user decryption.
 
 ## Current boundary
 
-The Stage 1 implementation keeps real inference and ZKP generation behind the
-worker protocol. The fixture worker makes output and certificate timing
-repeatable so experiments can measure the client itself. Model-specific output
-relations, production proof systems, proof soundness and paper security claims
-remain later work.
+The Stage 1 implementation keeps model execution and proof generation behind
+the worker protocol. The Stage 2 worker now supplies deterministic small
+diffusion and adapter-based Gemma outputs. Its random proof mode is accepted
+only by the explicitly named `dummy-random-v1` profile. Production model
+proofs, proof soundness and the final paper security claims remain later work.
+
+The Stage 2 study and implementation sequence is documented in
+[the model and zero-knowledge proof plan](docs/stage2-model-zkp-plan.md). It
+selects a fixed multi-step diffusion profile for the first real proof, compares
+EZKL and DeepProve, designs the VRF and HPKE binding proof, and specifies the
+resource-aware parallel scheduler.
+
+Benchmark commands and measured CPU, memory and GPU results are in
+[docs/benchmarks/stage2-model-benchmarks.md](docs/benchmarks/stage2-model-benchmarks.md).
 

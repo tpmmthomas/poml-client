@@ -68,7 +68,7 @@ type Miner struct {
 
 func New(config Config) *Miner {
 	if config.Model.ID == "" {
-		config.Model, _ = profiles.Fixture(config.ProfileID)
+		config.Model, _ = profiles.Load(config.ProfileID)
 	}
 	if config.Parallelism < 1 {
 		config.Parallelism = 1

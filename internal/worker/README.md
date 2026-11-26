@@ -7,6 +7,13 @@ node; the single-socket fixture serves both by default. A
 cap the frame size at 16 MiB. The fixture creates a socket with mode 0600.
 Cancellation closes the connection and interrupts outstanding work.
 
+The Go fixture is useful for Stage 1 protocol tests. Stage 2's
+`stage2/model_worker.py` implements the same framed protobuf protocol in
+Python. Its `dummy` backend is deterministic, its `diffusion-small` backend
+runs the fixed PyTorch denoiser, and its `gemma` backend wraps a bounded
+Hugging Face generation loop. The node selects one through the model profile
+in genesis, so consensus code does not import a model library.
+
 - [The client](worker.go) supplies the model and profile digests, signed query,
   verified input, parent, frozen prefix, request/attempt/miner IDs, resource
   bounds and ordered randomness. It checks the reply ID, profile, output
@@ -34,3 +41,9 @@ fields, a missing witness, response identity and canceling a delayed request.
 kills it mid-inference, restarts it using the same socket path and submits
 both fixture profiles successfully. Run `go test -race ./internal/worker` to
 exercise that path along with socket validation and cancellation.
+
+For Python worker checks, run `taskset -c 0-15 .venv/bin/python
+stage2/test_model_worker.py`. The Gemma test is skipped unless
+`POML_GEMMA_MODEL` points to a local or accessible checkpoint. The temporary
+`dummy-random-v1` certificate is deliberately accepted only by the matching
+profile and is not a model proof.

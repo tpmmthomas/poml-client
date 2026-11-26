@@ -142,10 +142,10 @@ func (m *Miner) certify(ctx context.Context, purpose string, w types.Winner, sta
 		"ticket_hash": w.TicketHash.String(),
 	}
 	m.record("proof_queue", "queued", "certificate request assembled", fields)
-	m.record("proof_start", "started", "fixture certification requested", fields)
+	m.record("proof_start", "started", "configured proof worker requested", fields)
 	started := time.Now()
 	cert, timing, err := m.config.Worker.Certify(ctx, m.config.Model, purpose+"/"+w.AttemptID, purpose, statement, witness)
-	if err == nil {
+	if err == nil && !m.config.Model.AcceptsRandomProof() {
 		err = cryptoutil.Verify(m.config.Genesis.CertificatePublic, cert, "certificate", statement)
 	}
 	fields["wall_ns"], fields["certification_ns"], fields["C_cert"] = time.Since(started).Nanoseconds(), timing.Duration.Nanoseconds(), 1
@@ -156,6 +156,10 @@ func (m *Miner) certify(ctx context.Context, purpose string, w types.Winner, sta
 		m.record("proof_failure", "failed", err.Error(), fields)
 		return nil, err
 	}
-	m.record("proof_finish", "complete", "fixture certificate verified", fields)
+	reason := "certificate verified"
+	if m.config.Model.AcceptsRandomProof() {
+		reason = "dummy proof accepted by configured policy"
+	}
+	m.record("proof_finish", "complete", reason, fields)
 	return cert, nil
 }

@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/thomas/poml-node/internal/chain"
 	"github.com/thomas/poml-node/internal/codec"
@@ -115,7 +114,9 @@ func Open(configPath string) (*Node, error) {
 		worker: worker.Client{
 			Socket:            resolvePath(baseDir, config.WorkerSocket),
 			CertificateSocket: resolveOptionalPath(baseDir, config.CertificateSocket),
-			Timeout:           10 * time.Second,
+			// The model profile owns the runtime budget. Gemma can legitimately
+			// exceed the Stage 1 fixture's ten-second test timeout.
+			Timeout: 0,
 		},
 	}
 	if persisted, loadErr := durable.Mempool(); loadErr == nil {

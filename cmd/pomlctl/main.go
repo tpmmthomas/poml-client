@@ -50,8 +50,9 @@ func initDevnet(args []string) {
 	flags := flag.NewFlagSet("init-devnet", flag.ExitOnError)
 	root := flags.String("dir", "run/devnet", "output directory")
 	nodes := flags.Int("nodes", 3, "number of node processes")
+	model := flags.String("model", "fixture-a", "model profile: fixture-a, dummy, diffusion-small or gemma3-1b")
 	flags.Parse(args)
-	manifest, err := devnet.Create(*root, *nodes)
+	manifest, err := devnet.Create(*root, *nodes, *model)
 	if err != nil {
 		fatal(err)
 	}

@@ -1,0 +1,88 @@
+# Stage 2 model worker
+
+`model_worker.py` is the Python side of the existing Go worker protocol. The
+Go node still owns consensus, VRFs, deterministic HPKE encryption, ticket
+selection and block validation. This process only receives a validated model
+request and returns canonical output bytes or a certificate object.
+
+## Select a backend
+
+The genesis profile selects the backend for every node in a run.
+
+```bash
+go run ./cmd/pomlctl init-devnet --dir run/dummy --nodes 1 --model dummy
+go run ./cmd/pomlctl init-devnet --dir run/diffusion --nodes 1 --model diffusion-small
+go run ./cmd/pomlctl init-devnet --dir run/gemma --nodes 1 --model gemma3-1b
+```
+
+Start the selected run with `./scripts/run_devnet.sh run/<name>`. The launcher
+keeps every child on the first half of the host CPUs. Set `POML_DEVICE=cpu` or
+`POML_DEVICE=cuda:0`. GPU mode exposes only the first GPU. A Gemma GPU run is
+limited to one node so the model process owns that device.
+
+For a local checkpoint in a devnet, set `POML_MODEL_REF=/path/to/checkpoint`
+before `run_devnet.sh`. This is useful for adapter tests such as the tiny local
+Gemma-compatible checkpoint used in the repository benchmarks. The profile's
+current digest still describes the adapter contract, so this override must not
+be used as final consensus evidence.
+
+The `dummy` backend needs no downloaded model. It hashes the input and the
+prescribed randomness into deterministic output bytes. Its certificate is 64
+random bytes and is accepted only by `dummy-random-v1`, which is intentionally
+insecure.
+
+`diffusion-small` is a fixed 8x8 single-channel PyTorch denoiser. The profile
+allocates one initial-noise slot and one slot for each of four denoising steps.
+The output is 64 quantized bytes. The network weights are seeded from the
+profile digest, so a clean install recreates the same reference model.
+
+`gemma3-1b` uses Hugging Face `google/gemma-3-1b-it`, a 512-token input limit
+and at most 16 sampled output tokens. The canonical output is big-endian
+32-bit token IDs. Hugging Face access to Gemma may require accepting the model
+license and setting `HF_TOKEN`. A local checkpoint can be used directly with
+the worker's `--model-ref` option or the benchmark script.
+
+The small diffusion vector is stable across the tested CPU and `cuda:0` paths.
+Gemma currently uses CPU fp32 or GPU fp16 and sampled generation, so those two
+execution paths can produce different token bytes. Pin one device and
+precision before treating a Gemma run as consensus evidence.
+
+## Run the worker directly
+
+The normal entry point is `run_devnet.sh`. For adapter development, start the
+worker directly after activating the repository environment.
+
+```bash
+taskset -c 0-15 .venv/bin/python stage2/model_worker.py \
+  --socket /tmp/poml-stage2.sock \
+  --profile-id diffusion-small \
+  --profiles-dir profiles \
+  --device cpu --threads 16 --cpu-start 0
+```
+
+The worker socket is mode `0600`. Its framed protobuf messages are defined in
+`api/proto/poml.proto`. The checked-in `api/proto/poml_pb2.py` is the matching
+Python generation.
+
+## Tests and measurements
+
+```bash
+taskset -c 0-15 .venv/bin/python stage2/test_model_worker.py
+taskset -c 0-15 .venv/bin/python scripts/benchmark_stage2.py \
+  --profile diffusion-small --device cpu --threads 16 --requests 8 \
+  --output /tmp/diffusion-small.json
+```
+
+The Gemma unit test runs only when `POML_GEMMA_MODEL` names an accessible
+checkpoint. The benchmark report in
+`docs/benchmarks/stage2-model-benchmarks.md` records the host, CPU cap,
+memory, timing and the authorized-checkpoint limitation.
+
+## Boundary with the final paper
+
+This worker executes model-shaped work and carries the temporary certificate
+through the Stage 1 block path. It does not yet generate a zero-knowledge
+proof. The planned EZKL model proof and the separate VRF/HPKE/block-binding
+proof are described in `docs/stage2-model-zkp-plan.md`. Until those profiles
+replace `dummy-random-v1`, a successful block demonstrates plumbing and timing,
+not model correctness or proof soundness.

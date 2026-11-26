@@ -33,7 +33,7 @@ type Manifest struct {
 	User    string   `json:"user"`
 }
 
-func Create(root string, count int) (Manifest, error) {
+func Create(root string, count int, modelIDs ...string) (Manifest, error) {
 	if count < 1 || count > 16 {
 		return Manifest{}, fmt.Errorf("node count must be between 1 and 16")
 	}
@@ -109,14 +109,18 @@ attempt_parallelism = 2
 		RecipientPrivateHex: hex.EncodeToString(recipientPrivate.Bytes()), RecipientPublicHex: hex.EncodeToString(recipientPrivate.PublicKey().Bytes()),
 	}
 	accounts = append(accounts, profile.AccountFile{ID: user.ID, Balance: 1_000_000, PublicKeyHex: hex.EncodeToString(userPublic)})
-	model, err := profiles.Fixture("fixture-a")
+	modelID := "fixture-a"
+	if len(modelIDs) > 0 && modelIDs[0] != "" {
+		modelID = modelIDs[0]
+	}
+	model, err := profiles.Load(modelID)
 	if err != nil {
 		return Manifest{}, err
 	}
 	genesis := profile.GenesisFile{
 		Version: 1, ChainID: "poml-stage1-devnet", ProtocolVersion: 1, HashBits: 256,
 		// 2^252 gives a roughly 1/16 single-attempt hit rate for quick local runs.
-		BaseTargetHex: "1" + strings.Repeat("0", 63), ModelProfileID: "fixture-a", Model: model,
+		BaseTargetHex: "1" + strings.Repeat("0", 63), ModelProfileID: modelID, Model: model,
 		CertificatePublicHex: hex.EncodeToString(certificatePublic), BlockReward: 1, QueryFee: 10,
 		ChallengeWindow: 10, ResponseLimit: 128, MaxBlockBytes: 1 << 20,
 		InitialAccounts: accounts, InitialMiners: miners,

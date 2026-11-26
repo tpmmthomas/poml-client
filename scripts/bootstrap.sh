@@ -34,3 +34,14 @@ printf 'protoc: '
 "$tool_prefix/protoc/bin/protoc" --version
 printf 'protoc-gen-go: '
 "$tool_prefix/bin/protoc-gen-go" --version
+
+if [ "${POML_SKIP_PYTHON:-0}" != "1" ]; then
+  python_bin="${POML_PYTHON:-python3}"
+  if [ ! -x "$PWD/.venv/bin/python" ]; then
+    "$python_bin" -m venv "$PWD/.venv"
+  fi
+  "$PWD/.venv/bin/python" -m pip install --upgrade pip
+  "$PWD/.venv/bin/python" -m pip install -r "$PWD/requirements-stage2.txt"
+  printf 'Python: '
+  "$PWD/.venv/bin/python" --version
+fi

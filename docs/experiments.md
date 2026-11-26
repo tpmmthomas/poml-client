@@ -7,7 +7,7 @@ to separate hosts and the TOML listen and seed addresses are changed.
 ## Prepare a run
 
 ```bash
-go run ./cmd/pomlctl init-devnet --dir run/devnet --nodes 3
+go run ./cmd/pomlctl init-devnet --dir run/devnet --nodes 3 --model dummy
 ```
 
 Archive `genesis.json`, `manifest.json`, the node TOML files, the worker
@@ -21,6 +21,13 @@ smaller target in an experiment whose purpose is measuring ticket throughput.
 ./scripts/run_devnet.sh run/devnet
 ./scripts/stop_devnet.sh run/devnet
 ```
+
+Use `--model diffusion-small` for the self-contained PyTorch denoiser or
+`--model gemma3-1b` for the bounded Hugging Face adapter. Set
+`POML_DEVICE=cpu` or `POML_DEVICE=cuda:0` before `run_devnet.sh`. The launcher
+pins all processes to half of the host's logical CPUs and exposes at most the
+first GPU. See [the Stage 2 benchmark report](benchmarks/stage2-model-benchmarks.md)
+for the measured resource use and the Gemma checkpoint limitation.
 
 The start script launches one worker and one node for every generated config.
 It writes stdout and PID files below the run directory. The stop script sends

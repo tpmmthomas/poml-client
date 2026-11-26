@@ -78,7 +78,7 @@ func LoadGenesis(path string) (Genesis, error) {
 		return Genesis{}, errors.New("unsupported or incomplete genesis")
 	}
 	if raw.Model.ID == "" {
-		model, modelErr := profiles.Fixture(raw.ModelProfileID)
+		model, modelErr := profiles.Load(raw.ModelProfileID)
 		if modelErr != nil {
 			return Genesis{}, fmt.Errorf("model profile: %w", modelErr)
 		}

@@ -1,0 +1,12 @@
+{
+  "id": "dummy",
+  "backend": "dummy",
+  "model_ref": "dummy-v1",
+  "model_digest": "2974dcd04a804485950742221292498a42882925279e5b2628d2151fc8a54122",
+  "randomness_slots": 1,
+  "randomness_bytes": 32,
+  "output_bytes": 32,
+  "ticket_weight": 1,
+  "max_runtime_ms": 5000,
+  "certificate_profile": "dummy-random-v1"
+}
