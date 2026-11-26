@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package poml.v1;
+
+option go_package = "github.com/thomas/poml-node/api/proto;proto";
+
+// Envelope frames one private worker request or response on a Unix stream.
+message Envelope {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    reserved 1 to 9, 12;
+    WORKER_REQUEST = 10;
+    WORKER_RESPONSE = 11;
+  }
+  Kind kind = 1;
+  bytes payload = 2;
+}
+
+// WorkerRequest is private, authenticated by local Unix-socket permissions.
+// No witness, output plaintext, encryption VRF proof or coins appear on P2P.
+message WorkerRequest {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    INFERENCE = 1;
+    CERTIFICATE = 2;
+  }
+  Kind kind = 1;
+  string request_id = 2;
+  string profile_id = 3;
+  string query_id = 4;
+  string attempt_id = 5;
+  bytes input = 6;
+  repeated bytes randomness = 7;  // Every prescribed slot, in index order.
+  bytes statement = 8;           // Canonical public bytes for the certificate.
+  uint32 version = 9;
+  bytes profile_digest = 10;
+  bytes model_digest = 11;
+  bytes signed_query = 12;
+  bytes parent = 13;
+  bytes prefix_digest = 14;
+  string miner_id = 15;
+  uint32 output_limit = 16;
+  uint32 runtime_ms = 17;
+  string certificate_profile = 18;
+  string purpose = 19;  // "winner" or "challenge".
+  Witness witness = 20;
+  bytes input_commitment = 21;
+}
+
+// Witness is private input to a future proving process. Stage 1's deterministic
+// fixture returns an opaque execution token and binds a certificate to the
+// exact public statement. It does not implement or attest a model relation.
+message Witness {
+  bytes execution = 1;
+  bytes output = 2;
+  bytes encryption_vrf = 3;
+  bytes encryption_proof = 4;
+  bytes encryption_input = 5;
+  bytes recipient = 6;
+  repeated bytes randomness = 7;
+  bytes input = 8;
+  bytes signed_query = 9;
+  bytes inference_vrf = 10;
+  bytes inference_proof = 11;
+  bytes inference_public_key = 12;
+  bytes encryption_public_key = 13;
+  bytes attempt_input = 14;
+  string chain_id = 15;
+}
+
+message WorkerResponse {
+  string request_id = 1;
+  bool ok = 2;
+  string error = 3;
+  bytes output = 4;
+  bytes certificate = 5;
+  uint64 operation_count = 6;
+  uint64 duration_ns = 7;
+  uint32 version = 8;
+  bytes profile_digest = 9;
+  bytes result_digest = 10;
+  bytes execution_witness = 11;
+  repeated uint32 output_shape = 12;
+  optional uint64 cpu_ns = 13; // Observed CPU time for this job, if supported.
+}
+

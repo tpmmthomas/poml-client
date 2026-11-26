@@ -1,0 +1,20 @@
+# Copy this file through `pomlctl init-devnet` or replace every placeholder.
+node_id = "node-0"
+listen = "127.0.0.1:19000"
+advertise = "127.0.0.1:19000"
+seeds = []
+rpc = "127.0.0.1:19100"
+rpc_token = "change-me"
+data_dir = "run/node-0"
+genesis = "genesis.json"
+worker_socket = "run/worker-0.sock"
+# certificate_socket = "run/prover-0.sock"  # optional separate certificate worker
+identity_private_key_hex = "64-byte-ed25519-private-key"
+inference_vrf_seed_hex = "32-byte-seed"
+encryption_vrf_seed_hex = "32-byte-seed"
+certificate_private_key_hex = "64-byte-ed25519-private-key"
+miner_id = "miner-0"
+run_id = "experiment-001"
+mining = true
+max_attempts = 2000
+attempt_parallelism = 2

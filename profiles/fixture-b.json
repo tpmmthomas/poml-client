@@ -1,0 +1,10 @@
+{
+  "id": "fixture-b",
+  "model_digest": "23a480dd1fd76f52fd2819d97942640699813cf463168129651e8b251ce00947",
+  "randomness_slots": 3,
+  "randomness_bytes": 32,
+  "output_bytes": 64,
+  "ticket_weight": 2,
+  "max_runtime_ms": 5000,
+  "certificate_profile": "fixture-ed25519-v1"
+}

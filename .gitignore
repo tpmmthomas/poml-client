@@ -1,0 +1,7 @@
+.tools/
+run/
+*.log
+*.pid
+__pycache__/
+*.pyc
+

@@ -1,0 +1,54 @@
+syntax = "proto3";
+package poml.peer.v1;
+option go_package = "github.com/thomas/poml-node/internal/p2p/wire";
+
+// TCP carries a four-byte big-endian length followed by one Frame. The
+// payload type is determined by Kind. Consensus objects are opaque here.
+message Frame {
+  enum Kind {
+    UNSPECIFIED = 0;
+    HELLO = 1;       // Hello
+    ACK = 2;         // raw Ed25519 signature over both Hello transcripts
+    GET_ADDR = 3;    // empty
+    ADDR = 4;        // Addresses
+    STATUS = 5;      // Point
+    INV = 6;         // Inventory
+    GET_DATA = 7;    // ObjectRef (transaction, block or query input)
+    DATA = 8;        // Data
+    NOT_FOUND = 9;   // ObjectRef
+    GET_HEADERS = 10;// Points of known ancestors, nearest to genesis last
+    HEADERS = 11;    // Points in parent-before-child order
+    PING = 12;       // raw 8-byte nonce
+    PONG = 13;       // raw 8-byte nonce
+    GOODBYE = 14;    // empty
+    GET_MEMPOOL = 15;// empty, next page from the initial connection snapshot
+    MEMPOOL = 16;    // Inventory, receiver requests the next page when drained
+  }
+  Kind kind = 1;
+  bytes payload = 2;
+}
+
+// Genesis commits to all consensus settings. Chain and profile names make
+// accidental cross-network connections easier for operators to diagnose.
+message Hello {
+  uint32 version = 1;
+  string chain = 2;
+  string profile = 3;
+  bytes genesis = 4;
+  bytes public_key = 5;
+  bytes nonce = 6;
+  string name = 7;
+  string address = 8;
+  string capability = 9;
+}
+
+message Addresses { repeated string address = 1; }
+message ObjectRef {
+  enum Category { UNKNOWN = 0; TX = 1; BLOCK = 2; INPUT = 3; }
+  Category category = 1;
+  bytes id = 2;
+}
+message Inventory { repeated ObjectRef items = 1; bool more = 2; }
+message Data { ObjectRef object = 1; bytes body = 2; }
+message Point { uint64 height = 1; bytes id = 2; bytes parent = 3; }
+message Points { repeated Point items = 1; }
