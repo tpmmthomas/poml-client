@@ -120,10 +120,11 @@ commitment, VRF, HPKE ciphertext or block context.
 The real `ikozlov/MobileDiffusionTiny` UNet exported successfully at a fixed
 8x8 latent shape. EZKL 23.0.5 then stopped at its convolution fixed-point
 scale assertion (`left: 26`, `right: 13`). The run generated no proof and is
-recorded as blocked in `mobile_diffusion_ezkl.py`'s manifest. The text encoder,
-scheduler, VAE decoder and PoML binding relation remain unproved. This is an
-implementation limitation measurement, not a claim that MobileDiffusion is
-unprovable.
+recorded as blocked in `mobile_diffusion_ezkl.py`'s manifest. An equivalent
+ONNX bias rewrite moved the failure to a later scale transition in the UNet,
+so it did not produce a proof either. The text encoder, scheduler, VAE decoder
+and PoML binding relation remain unproved. This is an implementation
+limitation measurement, not a claim that MobileDiffusion is unprovable.
 
 ## How to run each profile through the node
 
