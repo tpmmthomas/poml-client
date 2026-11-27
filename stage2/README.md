@@ -64,6 +64,36 @@ The worker socket is mode `0600`. Its framed protobuf messages are defined in
 `api/proto/poml.proto`. The checked-in `api/proto/poml_pb2.py` is the matching
 Python generation.
 
+## Run real model-proof experiments
+
+The proving commands live in [proof/README.md](proof/README.md). They are
+separate from the request worker because setup and proving are much slower
+than inference.
+
+The small diffusion command exports the same four-step denoising core used by
+the worker, generates a real EZKL proof, verifies it and rejects a tampered
+public instance.
+
+```bash
+source .venv/bin/activate
+OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 OPENBLAS_NUM_THREADS=16 \
+  taskset -c 0-15 python stage2/proof/ezkl_diffusion.py \
+  --output-dir /tmp/poml-proof/diffusion-small
+```
+
+The Gemma command runs DeepProve's Gemma 3 SafeTensors path. The paper target
+is Gemma 3 270M. An approved Hugging Face token is required for the official
+checkpoint. The public mirror used for the local benchmark is documented in
+the proof README.
+
+```bash
+POML_DEEPPROVE_MODEL=google/gemma-3-270m-it \
+  stage2/proof/run_deepprove_gemma.sh
+```
+
+The MobileDiffusion command exports the real UNet and records the current EZKL
+compiler limitation. It does not label an export as a proof.
+
 ## Tests and measurements
 
 ```bash
@@ -80,9 +110,10 @@ memory, timing and the authorized-checkpoint limitation.
 
 ## Boundary with the final paper
 
-This worker executes model-shaped work and carries the temporary certificate
-through the Stage 1 block path. It does not yet generate a zero-knowledge
-proof. The planned EZKL model proof and the separate VRF/HPKE/block-binding
-proof are described in `docs/stage2-model-zkp-plan.md`. Until those profiles
-replace `dummy-random-v1`, a successful block demonstrates plumbing and timing,
-not model correctness or proof soundness.
+The socket worker still carries the temporary random certificate through the
+Stage 1 block path. The new proof commands prove model calculations offline,
+but they do not yet replace that certificate. A complete winner proof still
+needs the output commitment, VRF, HPKE and block-context binding relation from
+`docs/stage2-model-zkp-plan.md`. Until that proof bundle is wired into the Go
+validator, a successful block demonstrates plumbing and timing, not complete
+PoML proof soundness.

@@ -1,6 +1,10 @@
 .tools/
 .venv/
+.cache/
 run/
+proof-runs/
+model_cache/
+bench-llm.csv
 *.log
 *.pid
 __pycache__/

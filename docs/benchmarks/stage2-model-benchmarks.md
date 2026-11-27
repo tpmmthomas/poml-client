@@ -67,6 +67,61 @@ digest identifies the Stage 2 adapter profile. It does not yet attest to a
 downloaded Gemma weight manifest because the gated checkpoint could not be
 retrieved on this host.
 
+## Real proving runs
+
+These runs used logical CPUs 0–15, no GPU and no concurrent large job.
+
+### EZKL small diffusion core
+
+```bash
+OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 OPENBLAS_NUM_THREADS=16 \
+  taskset -c 0-15 python stage2/proof/ezkl_diffusion.py \
+  --output-dir /tmp/poml-proof/diffusion-small
+```
+
+EZKL 23.0.5 generated and verified a four-step proof. The measured stages
+were export 0.54 s, settings 0.19 s, compile 0.01 s, witness 0.21 s, SRS
+generation 2.37 s, setup 9.40 s, proving 9.27 s and verification 0.04 s.
+The proof was 62,088 bytes, the verification key was 789,959 bytes and the
+SRS was 16,777,476 bytes. The prover key was about 1.4 GiB during setup and
+was removed after the run. A mutation of the public instance was rejected.
+
+The graph proves the exact denoising core and scheduler. Its conditioning and
+timestep bias maps are private precomputed inputs because the current EZKL
+release rejects the full linear-to-convolution scale transition. The output
+is public in this experiment, so this is not yet the hidden-output PoML proof.
+
+### DeepProve Gemma 3 270M
+
+```bash
+POML_DEEPPROVE_MODEL=MatthewsFace/gemma-3-270m-it \
+  POML_DEEPPROVE_WORKSPACE=/tmp/deep-prove-poml \
+  POML_DEEPPROVE_OUTPUT=/tmp/poml-proof/gemma3-270m \
+  stage2/proof/run_deepprove_gemma.sh
+```
+
+At sequence length 8 and 16 threads, DeepProve generated and verified an
+11,024,571-byte proof. Its CSV reports 94.107 seconds for proving, 2.203
+seconds for full verification, 23.035 seconds for inference and 42,993 MiB
+peak RSS. The command exported the proof bytes after the upstream verifier
+accepted them. Exact values are preserved in `manifest.json` and `bench.csv`.
+
+The measured model was a public mirror because the official Google checkpoint
+returned HTTP 401 on this host. Use the official model and pin its weight
+manifest before using the result as paper evidence. DeepProve proves the
+transformer inference and next-token argmax. It does not prove the PoML output
+commitment, VRF, HPKE ciphertext or block context.
+
+### MobileDiffusion
+
+The real `ikozlov/MobileDiffusionTiny` UNet exported successfully at a fixed
+8x8 latent shape. EZKL 23.0.5 then stopped at its convolution fixed-point
+scale assertion (`left: 26`, `right: 13`). The run generated no proof and is
+recorded as blocked in `mobile_diffusion_ezkl.py`'s manifest. The text encoder,
+scheduler, VAE decoder and PoML binding relation remain unproved. This is an
+implementation limitation measurement, not a claim that MobileDiffusion is
+unprovable.
+
 ## How to run each profile through the node
 
 The devnet generator selects the model in genesis. The worker launcher reads
@@ -137,7 +192,7 @@ The implementation is deliberately useful before the final ZKP system exists.
 - Go still performs the real RFC 9381 VRF and deterministic RFC 9180 HPKE work.
   The Python worker supplies model output and the temporary proof bytes.
 
-In simple terms, the node can now run the real model-shaped work and carry its
-result through the same distributed chain. It can measure that work and test
-the cryptographic plumbing. It cannot yet prove that a model really produced
-the encrypted answer.
+In simple terms, the standalone commands can now prove the small diffusion
+core and a bounded Gemma calculation. The distributed node still carries the
+temporary certificate, and MobileDiffusion plus the VRF/HPKE binding relation
+remain unfinished.

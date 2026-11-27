@@ -111,6 +111,7 @@ Each implementation area has a short local README.
 | `cmd/pomlctl` | Devnet creation, signed query submission, RPC inspection and decryption. |
 | `cmd/pomlworker` | Separate deterministic inference and certificate fixture. |
 | `stage2/model_worker.py` | Python worker for dummy, small diffusion and Gemma model profiles. |
+| `stage2/proof` | Real EZKL and DeepProve model-proof experiments plus the MobileDiffusion compatibility probe. |
 | `scripts/benchmark_stage2.py` | Constrained model load, timing, memory and device benchmark. |
 | `api/proto` | Versioned protobuf wire and worker messages. |
 | `internal/chain` | Block validation, branch storage and fork choice. |
@@ -178,9 +179,11 @@ user decryption.
 
 The Stage 1 implementation keeps model execution and proof generation behind
 the worker protocol. The Stage 2 worker now supplies deterministic small
-diffusion and adapter-based Gemma outputs. Its random proof mode is accepted
-only by the explicitly named `dummy-random-v1` profile. Production model
-proofs, proof soundness and the final paper security claims remain later work.
+diffusion and adapter-based Gemma outputs. The standalone `stage2/proof`
+commands generate and verify a real small-diffusion EZKL proof and a bounded
+DeepProve Gemma proof. The worker's random proof mode is accepted only by the
+explicitly named `dummy-random-v1` profile. MobileDiffusion and the final
+VRF/HPKE-bound proof bundle remain later work.
 
 The Stage 2 study and implementation sequence is documented in
 [the model and zero-knowledge proof plan](docs/stage2-model-zkp-plan.md). It

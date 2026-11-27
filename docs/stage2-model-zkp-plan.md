@@ -522,6 +522,32 @@ test before it is connected to the node.
    the selected composition mode.
 7. Emit only the statement digest, output commitment, and proof profile digest.
 
+## Implementation findings from the first real proofs
+
+The repository now contains reproducible commands under
+[`stage2/proof`](../stage2/proof/README.md).
+
+- EZKL 23.0.5 generated and verified a real Halo2 proof for the exact
+  four-step `diffusion-small` denoising core. The test uses private,
+  precomputed conditioning-and-timestep bias maps and exposes the output as a
+  public instance. It rejects a mutated public instance. This closes the
+  denoising-core feasibility check, but it does not close the full conditioning
+  or hidden-output relation.
+- DeepProve revision
+  `9d1a53e2ef49ffa2c902b8689cd3c58057a4e662` generated and verified a bounded
+  Gemma 3 270M proof through next-token argmax. The command exports the proof
+  bytes after the upstream verifier accepts them. DeepProve's Gemma path is
+  therefore a usable LLM model-proof backend for this experiment.
+- A real MobileDiffusionTiny UNet exported and ran at a fixed 8x8 latent shape.
+  EZKL stopped while assigning convolution fixed-point scales with
+  `left: 26, right: 13`. The run is recorded as a blocked compatibility
+  result. The repository does not label the ONNX export as a proof.
+
+These results do not change the protocol relation. They show that a model
+proof can be produced for two bounded model slices, while the PoML-specific
+binding proof and the complete MobileDiffusion pipeline still require their
+own implementation and measurements.
+
 The guest must use the same canonical codecs as the Go node. A second hand
 written serialization is a consensus risk.
 
