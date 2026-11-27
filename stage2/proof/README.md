@@ -8,16 +8,18 @@ run inside every inference request.
 
 `ezkl_diffusion.py` exports the exact four-step `diffusion-small` denoising
 core used by `stage2/model_worker.py`, generates an EZKL proving key, creates a
-Halo2 proof, verifies it, and checks that changing a public instance makes
-verification fail. The output is a real model proof for the fixed-point graph.
+Halo2 proof, verifies it, and checks that changing the public output commitment
+makes verification fail. The output is a real model proof for the fixed-point
+graph. The output pixels stay private in the proof. EZKL exposes only a
+Poseidon hash of the quantized output as a public instance.
 Its manifest says `conditioning_scope=precomputed_bias` because EZKL 23.0.5
 cannot keep the convolution bias scales aligned when the conditioning linear
 layers are placed inside this graph. The graph therefore proves the denoising
 core and scheduler, not the derivation of each bias map from the query.
 
-The proof exposes the model output as a public EZKL instance. That lets the
-verifier check the result while the backend is being integrated. The final
-PoML proof must replace this with a hidden output and a public commitment.
+The final PoML proof must connect this Poseidon commitment to the protocol's
+tagged SHA-256 output commitment, deterministic HPKE ciphertext and VRF
+transcript. That binding is not present in this standalone experiment.
 
 `run_deepprove_gemma.sh` builds the pinned DeepProve Gemma backend, proves and
 verifies a bounded Gemma 3 inference, and exports the proof bytes. DeepProve's

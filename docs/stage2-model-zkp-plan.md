@@ -529,10 +529,10 @@ The repository now contains reproducible commands under
 
 - EZKL 23.0.5 generated and verified a real Halo2 proof for the exact
   four-step `diffusion-small` denoising core. The test uses private,
-  precomputed conditioning-and-timestep bias maps and exposes the output as a
-  public instance. It rejects a mutated public instance. This closes the
-  denoising-core feasibility check, but it does not close the full conditioning
-  or hidden-output relation.
+  precomputed conditioning-and-timestep bias maps and exposes only a Poseidon
+  hash of the output as a public instance. It rejects a mutated commitment.
+  This closes the denoising-core feasibility check, but it does not close the
+  full conditioning or protocol commitment relation.
 - DeepProve revision
   `9d1a53e2ef49ffa2c902b8689cd3c58057a4e662` generated and verified a bounded
   Gemma 3 270M proof through next-token argmax. The command exports the proof

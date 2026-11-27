@@ -72,7 +72,7 @@ than inference.
 
 The small diffusion command exports the same four-step denoising core used by
 the worker, generates a real EZKL proof, verifies it and rejects a tampered
-public instance.
+public output commitment. The output bytes stay private in that proof.
 
 ```bash
 source .venv/bin/activate

@@ -16,10 +16,13 @@ certifies the denoising core and its scheduler, while a future profile must
 add a separately proved conditioning relation before it can be used as the
 complete PoML winner proof.
 
-EZKL exposes the model output as a public instance in this profile.  That is
-useful for validating the proving pipeline, but it is not the final hidden
-output-commitment relation from the paper.  The script never changes the Go
-node's temporary random-certificate policy.
+The model output uses EZKL's ``hashed/public`` visibility.  The proof exposes
+only a Poseidon hash of the output as a public instance, while the output
+bytes remain private advice.  This is closer to the paper's hidden-output
+requirement than publishing the pixels.  The final PoML profile still needs
+to bind that value to the protocol's tagged SHA-256 commitment, ciphertext,
+VRF transcript and block statement.  The script never changes the Go node's
+temporary random-certificate policy.
 """
 
 from __future__ import annotations
@@ -222,7 +225,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     run_args = ezkl.PyRunArgs()
     run_args.input_visibility = "private"
-    run_args.output_visibility = "public"
+    # Keep the model output private and expose only its circuit commitment.
+    # The final PoML binding relation will connect this Poseidon commitment to
+    # the protocol's tagged SHA-256 output commitment and HPKE ciphertext.
+    run_args.output_visibility = "hashed/public"
     run_args.param_visibility = "fixed"
     run_args.input_scale = 13
     run_args.param_scale = 13
@@ -266,7 +272,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "input": args.input,
         "steps": profile["steps"],
         "conditioning_scope": "precomputed_bias",
-        "output_visibility": "public",
+        "output_visibility": "hashed/public",
+        "output_commitment": "EZKL Poseidon hash of the quantized output",
         "relation_scope": "four-step TinyDenoiser denoising core and scheduler",
         "poML_complete_relation": False,
         "proof_verified": True,

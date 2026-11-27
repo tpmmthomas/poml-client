@@ -80,16 +80,19 @@ OMP_NUM_THREADS=16 MKL_NUM_THREADS=16 OPENBLAS_NUM_THREADS=16 \
 ```
 
 EZKL 23.0.5 generated and verified a four-step proof. The measured stages
-were export 0.54 s, settings 0.19 s, compile 0.01 s, witness 0.21 s, SRS
-generation 2.37 s, setup 9.40 s, proving 9.27 s and verification 0.04 s.
-The proof was 62,088 bytes, the verification key was 789,959 bytes and the
+were export 0.43 s, settings 0.18 s, compile 0.01 s, witness 0.21 s, SRS
+generation 2.37 s, setup 14.06 s, proving 14.27 s and verification 0.06 s.
+The proof was 57,319 bytes, the verification key was 839,623 bytes and the
 SRS was 16,777,476 bytes. The prover key was about 1.4 GiB during setup and
-was removed after the run. A mutation of the public instance was rejected.
+was removed after the run. The output pixels were private and a mutation of
+the public Poseidon commitment was rejected.
 
 The graph proves the exact denoising core and scheduler. Its conditioning and
 timestep bias maps are private precomputed inputs because the current EZKL
 release rejects the full linear-to-convolution scale transition. The output
-is public in this experiment, so this is not yet the hidden-output PoML proof.
+pixels are private and only an EZKL Poseidon hash is public. The final PoML
+proof still needs to bind that hash to the protocol's tagged SHA-256 output
+commitment, ciphertext and VRF transcript.
 
 ### DeepProve Gemma 3 270M
 
