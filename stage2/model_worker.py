@@ -10,8 +10,9 @@ The worker supports three profile backends.
 * ``gemma`` loads a pinned Hugging Face causal language model and produces a
   fixed-length sampled token sequence from the query prompt.
 
-The worker does not claim to generate a zero-knowledge proof. The random proof
-mode is accepted only when the Go chain profile says ``dummy-random-v1``.
+The worker's random proof mode is accepted only when the Go chain profile says
+``dummy-random-v1``. Auxiliary profiles use the shared Go transcript checker,
+and ``zk-ezkl-diffusion-v1`` additionally returns a verified EZKL model proof.
 """
 
 from __future__ import annotations
@@ -22,9 +23,11 @@ import json
 import os
 import secrets
 import socket
+import subprocess
 import sys
 import threading
 import time
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -272,13 +275,30 @@ class GemmaRunner:
 class ModelWorker:
     """Socket server that dispatches one selected profile backend."""
 
-    def __init__(self, profile: dict[str, Any], device: str, threads: int, cpu_start: int, model_ref: str | None):
+    def __init__(
+        self,
+        profile: dict[str, Any],
+        device: str,
+        threads: int,
+        cpu_start: int,
+        model_ref: str | None,
+        aux_helper: str | None = None,
+        certificate_key_hex: str | None = None,
+        profile_path: Path | None = None,
+        proof_cache_dir: Path | None = None,
+    ):
         self.profile = profile
         self.device = device
         self.threads = threads
         self.cpu_start = cpu_start
         self.model_ref = model_ref or profile.get("model_ref", profile["id"])
         self.backend = profile.get("backend", "dummy")
+        self.aux_helper = aux_helper
+        self.certificate_key_hex = certificate_key_hex
+        self.profile_path = profile_path
+        self.proof_cache_dir = proof_cache_dir
+        if self.proof_cache_dir is not None:
+            self.proof_cache_dir.mkdir(parents=True, exist_ok=True)
         self.model: TinyDenoiser | GemmaRunner | None = None
         configure_runtime(threads, cpu_start)
         if self.backend == "diffusion-small":
@@ -374,13 +394,44 @@ class ModelWorker:
         )
         response.result_digest = hash_bytes("worker-output", output)
 
-    @staticmethod
-    def prove(request: pb.WorkerRequest, response: pb.WorkerResponse) -> None:
-        if request.certificate_profile != "dummy-random-v1":
-            raise ValueError("the Python worker only supports the explicitly dummy proof profile")
-        if not request.statement or request.witness is None or not request.witness.output:
-            raise ValueError("dummy proof request is missing statement or witness")
-        response.certificate = secrets.token_bytes(64)
+    def prove(self, request: pb.WorkerRequest, response: pb.WorkerResponse) -> None:
+        if request.certificate_profile == "dummy-random-v1":
+            if not request.statement or request.witness is None or not request.witness.output:
+                raise ValueError("dummy proof request is missing statement or witness")
+            response.certificate = secrets.token_bytes(64)
+        elif request.certificate_profile.startswith(("aux-", "zk-")):
+            if not self.aux_helper or not self.certificate_key_hex:
+                raise ValueError("an auxiliary proof helper and certificate key are required")
+            completed = subprocess.run(
+                [self.aux_helper, "--certificate-private-key-hex", self.certificate_key_hex],
+                input=request.SerializeToString(),
+                capture_output=True,
+                check=False,
+            )
+            if completed.returncode != 0:
+                message = completed.stderr.decode("utf-8", errors="replace").strip()
+                raise ValueError(message or "auxiliary proof helper rejected the witness")
+            response.certificate = completed.stdout
+            if request.certificate_profile == "zk-ezkl-diffusion-v1":
+                if self.profile_path is None or self.proof_cache_dir is None:
+                    raise ValueError("EZKL profile needs a proof cache directory")
+                if self.backend != "diffusion-small":
+                    raise ValueError("EZKL profile requires the small diffusion backend")
+                from stage2.proof.ezkl_attempt import prove_attempt
+
+                if request.witness is None:
+                    raise ValueError("EZKL proof request is missing its witness")
+                with tempfile.TemporaryDirectory(prefix="attempt-", dir=self.proof_cache_dir) as temporary:
+                    model_proof, _ = prove_attempt(
+                        self.profile_path,
+                        bytes(request.input),
+                        list(request.randomness),
+                        self.proof_cache_dir,
+                        Path(temporary),
+                    )
+                response.model_proof = model_proof
+        else:
+            raise ValueError(f"unsupported certificate profile {request.certificate_profile!r}")
         response.result_digest = hash_bytes("worker-certificate", response.certificate)
         response.operation_count = len(response.certificate)
 
@@ -458,6 +509,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="cpu", choices=["cpu", "cuda:0"], help="use CPU or the first GPU")
     parser.add_argument("--threads", type=int, default=0, help="CPU threads, capped at half the host")
     parser.add_argument("--cpu-start", type=int, default=0, help="first logical CPU in the worker's affinity slice")
+    parser.add_argument("--aux-helper", default=None, help="pomlproof executable for auxiliary transcript validation")
+    parser.add_argument("--certificate-private-key-hex", default=None, help="genesis certificate key for auxiliary profiles")
+    parser.add_argument("--proof-cache-dir", type=Path, default=None, help="EZKL setup cache for proof profiles")
     return parser.parse_args()
 
 
@@ -466,7 +520,17 @@ def main() -> None:
     profile = load_profile(args.profiles_dir, args.profile_id)
     if profile.get("backend") == "fixture":
         raise SystemExit("fixture profiles must use cmd/pomlworker")
-    worker = ModelWorker(profile, args.device, args.threads, args.cpu_start, args.model_ref)
+    worker = ModelWorker(
+        profile,
+        args.device,
+        args.threads,
+        args.cpu_start,
+        args.model_ref,
+        args.aux_helper,
+        args.certificate_private_key_hex,
+        args.profiles_dir / f"{args.profile_id}.json",
+        args.proof_cache_dir,
+    )
     serve(worker, args.socket)
 
 

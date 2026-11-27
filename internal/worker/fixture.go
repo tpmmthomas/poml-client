@@ -7,9 +7,11 @@ import (
 	"crypto/ed25519"
 	"crypto/sha512"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -152,9 +154,108 @@ func (s FixtureServer) fixtureCertificate(r *pb.WorkerRequest, reply *pb.WorkerR
 		len(w.Randomness) == 0 || len(w.AttemptInput) == 0 {
 		return errors.New("incomplete inference randomness witness")
 	}
+	if strings.HasPrefix(r.CertificateProfile, "aux-") || strings.HasPrefix(r.CertificateProfile, "zk-") {
+		if err := ValidateAuxiliaryWitness(r); err != nil {
+			return err
+		}
+	}
 	reply.Certificate = cryptoutil.Sign(s.Certificate, "certificate", r.Statement)
 	digest := types.HashBytes("worker-certificate", reply.Certificate)
 	reply.ResultDigest = digest[:]
+	return nil
+}
+
+// ValidateAuxiliaryWitness checks the private transcript for an auxiliary
+// proof worker. It is exported for the small Go helper used by the Python
+// model worker, so both worker implementations share exactly the same VRF,
+// commitment and HPKE checks.
+func ValidateAuxiliaryWitness(r *pb.WorkerRequest) error {
+	statement, err := codec.DecodeWinnerStatement(r.Statement)
+	if err != nil {
+		return fmt.Errorf("decode winner statement: %w", err)
+	}
+	winner := statement.Winner
+	w := r.Witness
+	if winner.ChainID != w.ChainId {
+		return errors.New("witness chain ID mismatch")
+	}
+	if !bytes.Equal(w.Recipient, winner.Recipient) {
+		return errors.New("witness recipient mismatch")
+	}
+	if len(winner.EncryptionVRFPublic) != 32 || len(winner.InferenceVRFPublic) != 32 {
+		return errors.New("statement is missing registered VRF keys")
+	}
+	if !bytes.Equal(w.InferencePublicKey, winner.InferenceVRFPublic) || !bytes.Equal(w.EncryptionPublicKey, winner.EncryptionVRFPublic) {
+		return errors.New("witness VRF public key mismatch")
+	}
+	expectedAttempt := codec.AttemptInput(winner.Parent, winner.PrefixDigest, winner.ModelID, winner.QueryID, winner.MinerID, winner.AttemptID)
+	if !bytes.Equal(w.AttemptInput, expectedAttempt) {
+		return errors.New("attempt input mismatch")
+	}
+	if err := cryptoutil.VRFVerify(w.InferencePublicKey, w.AttemptInput, w.InferenceVrf, w.InferenceProof); err != nil {
+		return fmt.Errorf("inference VRF witness: %w", err)
+	}
+	spec, err := profiles.Load(r.ProfileId)
+	if err != nil {
+		return err
+	}
+	specDigest := spec.Digest()
+	if !bytes.Equal(r.ProfileDigest, specDigest[:]) {
+		return errors.New("worker profile digest mismatch")
+	}
+	if winner.ProofProfile != r.CertificateProfile || winner.ProfileDigest != specDigest {
+		return errors.New("statement proof profile mismatch")
+	}
+	if len(w.Output) == 0 || len(w.Output) > int(spec.OutputBytes) {
+		return errors.New("model output exceeds the profile limit")
+	}
+	randomness, err := cryptoutil.ExpandRandomness(spec, w.AttemptInput, w.InferenceVrf)
+	if err != nil {
+		return err
+	}
+	if len(randomness) != len(w.Randomness) {
+		return errors.New("randomness slot count mismatch")
+	}
+	for index := range randomness {
+		if !bytes.Equal(randomness[index], w.Randomness[index]) {
+			return fmt.Errorf("randomness slot %d mismatch", index)
+		}
+	}
+	expectedEncryptionInput := types.HashBytes("encryption-input", w.AttemptInput)
+	if !bytes.Equal(w.EncryptionInput, expectedEncryptionInput[:]) || !bytes.Equal(winner.EncryptionVRFInput, expectedEncryptionInput[:]) {
+		return errors.New("encryption VRF input mismatch")
+	}
+	if err := cryptoutil.VRFVerify(w.EncryptionPublicKey, w.EncryptionInput, w.EncryptionVrf, w.EncryptionProof); err != nil {
+		return fmt.Errorf("encryption VRF witness: %w", err)
+	}
+	nonce, err := cryptoutil.CommitmentNonce(w.ChainId, winner, w.EncryptionVrf)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(nonce, w.OutputCommitmentNonce) {
+		return errors.New("output commitment nonce mismatch")
+	}
+	if cryptoutil.OutputCommitment(nonce, w.Output) != winner.OutputCommitment {
+		return errors.New("output commitment mismatch")
+	}
+	ciphertext, err := cryptoutil.SealOutputBound(w.Recipient, w.EncryptionVrf, w.ChainId, winner, nonce, w.Output)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(ciphertext, winner.Ciphertext) {
+		return errors.New("ciphertext does not match the private output witness")
+	}
+	inputCommitment := types.HashBytes("input", w.Input)
+	if inputCommitment != winner.InputCommitment {
+		return errors.New("private input does not open the query commitment")
+	}
+	query, err := codec.DecodeTx(w.SignedQuery)
+	if err != nil || query.Kind != types.TxQuery || query.QueryID != winner.QueryID || query.ModelID != winner.ModelID || query.Commitment != winner.InputCommitment || !bytes.Equal(query.Input, w.Input) || !bytes.Equal(query.Recipient, w.Recipient) || len(query.Signature) != ed25519.SignatureSize {
+		return errors.New("signed query does not match the winner statement")
+	}
+	if len(w.Execution) == 0 {
+		return errors.New("model execution witness is empty")
+	}
 	return nil
 }
 

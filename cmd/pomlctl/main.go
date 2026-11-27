@@ -50,7 +50,7 @@ func initDevnet(args []string) {
 	flags := flag.NewFlagSet("init-devnet", flag.ExitOnError)
 	root := flags.String("dir", "run/devnet", "output directory")
 	nodes := flags.Int("nodes", 3, "number of node processes")
-	model := flags.String("model", "fixture-a", "model profile: fixture-a, dummy, diffusion-small or gemma3-1b")
+	model := flags.String("model", "fixture-a", "model profile: fixture-a, fixture-a-aux, dummy, diffusion-small, diffusion-small-aux, diffusion-small-ezkl, gemma3-1b or gemma3-1b-aux")
 	flags.Parse(args)
 	manifest, err := devnet.Create(*root, *nodes, *model)
 	if err != nil {
@@ -181,7 +181,16 @@ func decryptBlock(args []string) {
 	if err := json.Unmarshal(nodeInfoBytes, &nodeInfo); err != nil || nodeInfo.ChainID == "" {
 		fatal(errors.New("node did not return a chain ID"))
 	}
-	plaintext, err := cryptoutil.OpenOutput(privateKey, nodeInfo.ChainID, block.Winner)
+	var plaintext []byte
+	if block.Winner.ProofProfile != "" {
+		var nonce []byte
+		plaintext, nonce, err = cryptoutil.OpenOutputBound(privateKey, nodeInfo.ChainID, block.Winner)
+		if err == nil && cryptoutil.OutputCommitment(nonce, plaintext) != block.Winner.OutputCommitment {
+			err = errors.New("decrypted output commitment does not match the block")
+		}
+	} else {
+		plaintext, err = cryptoutil.OpenOutput(privateKey, nodeInfo.ChainID, block.Winner)
+	}
 	if err != nil {
 		fatal(err)
 	}

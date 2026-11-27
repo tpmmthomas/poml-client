@@ -17,9 +17,15 @@ cannot keep the convolution bias scales aligned when the conditioning linear
 layers are placed inside this graph. The graph therefore proves the denoising
 core and scheduler, not the derivation of each bias map from the query.
 
+`ezkl_attempt.py` uses the same graph with the actual PoML randomness slots and
+returns one proof JSON object for the worker's versioned proof bundle. Setup
+artifacts are cached because setup is much slower than an individual proof.
+
 The final PoML proof must connect this Poseidon commitment to the protocol's
 tagged SHA-256 output commitment, deterministic HPKE ciphertext and VRF
-transcript. That binding is not present in this standalone experiment.
+transcript. The Go auxiliary profile now checks that transcript before signing
+the bundle. A trusted peer-side EZKL verifier is still needed before the
+`zk-ezkl-diffusion-v1` profile should be used against adversarial peers.
 
 `run_deepprove_gemma.sh` builds the pinned DeepProve Gemma backend, proves and
 verifies a bounded Gemma 3 inference, and exports the proof bytes. DeepProve's
@@ -59,6 +65,10 @@ The command leaves `proof.json`, `settings.json`, `vk`, `srs`, and a
 removed by default after proving. Add `--keep-prover-key` or `--keep-witness`
 when investigating the run. Setup files are experiment artifacts and must not
 be committed to Git.
+
+The worker profile `diffusion-small-ezkl` invokes `ezkl_attempt.py` internally.
+It keeps setup artifacts under the run directory's `proof-cache-*` folder and
+removes each per-attempt witness after the proof response is returned.
 
 For Gemma, use the official model when access is available.
 

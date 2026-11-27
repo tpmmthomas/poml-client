@@ -10,6 +10,7 @@ import (
 
 	"github.com/thomas/poml-node/internal/codec"
 	cryptoutil "github.com/thomas/poml-node/internal/crypto"
+	proofutil "github.com/thomas/poml-node/internal/proof"
 	"github.com/thomas/poml-node/internal/types"
 )
 
@@ -47,11 +48,29 @@ func (m *Miner) publish(ctx context.Context, r miningRound, winner attemptResult
 		"included_losses": selected, "overflow": len(losses) - selected,
 	}
 	m.record("response_assembly", "complete", "ordered current-round losses", fields)
-	cert, err := m.certify(ctx, "winner", w, codec.WinnerStatement(block), winner.witness)
+	cert, modelProof, err := m.certify(ctx, "winner", w, codec.WinnerStatement(block), winner.witness)
 	if err != nil {
 		return err
 	}
 	block.Winner.Certificate = cert
+	if m.config.Model.UsesProofBundle() {
+		if len(modelProof) == 0 {
+			// The Go fixture predates the optional model-proof response field.
+			// Keep its execution token in the envelope until a real model
+			// backend supplies a proof object.
+			modelProof = winner.witness.Execution
+		}
+		bundle, bundleErr := proofutil.Encode(proofutil.Bundle{
+			ProfileID: m.config.Model.CertificateProfile, SetupDigest: m.config.Model.Digest(),
+			StatementHash: proofutil.StatementDigest(codec.WinnerStatement(block)),
+			ModelProof:    modelProof, BindingProof: cert,
+		})
+		if bundleErr != nil {
+			return bundleErr
+		}
+		block.Winner.ProofBundle = bundle
+		block.Winner.Certificate = nil
+	}
 	block.Header.BodyDigest = codec.BodyDigest(block)
 	block.Signature = cryptoutil.Sign(m.config.Identity, "block", codec.BlockUnsignedBytes(block))
 	fields["block_hash"], fields["bytes"] = codec.BlockID(block).String(), len(codec.BlockBytes(block))
@@ -74,6 +93,12 @@ func (m *Miner) publish(ctx context.Context, r miningRound, winner attemptResult
 func (m *Miner) fitResponses(block types.Block, losses []types.Tx) (int, error) {
 	block.Signature = make([]byte, ed25519.SignatureSize)
 	block.Winner.Certificate = make([]byte, ed25519.SignatureSize)
+	if m.config.Model.UsesProofBundle() {
+		// The current certificate-backed bundle contains a small execution token.
+		// Reserve a bounded envelope before the response suffix is selected. A
+		// future model-proof profile must set a larger explicit block budget.
+		block.Winner.ProofBundle = make([]byte, m.config.Model.ProofReserveBytes())
+	}
 	check := m.config.CheckLimits
 	if check == nil {
 		check = func(b types.Block) error {

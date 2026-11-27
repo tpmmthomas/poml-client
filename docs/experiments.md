@@ -22,7 +22,9 @@ smaller target in an experiment whose purpose is measuring ticket throughput.
 ./scripts/stop_devnet.sh run/devnet
 ```
 
-Use `--model diffusion-small` for the self-contained PyTorch denoiser or
+Use `--model diffusion-small` for the self-contained PyTorch denoiser,
+`--model diffusion-small-aux` for the host-side PoML transcript checks, or
+`--model diffusion-small-ezkl` to carry a real EZKL proof. Use
 `--model gemma3-1b` for the bounded Hugging Face adapter. Set
 `POML_DEVICE=cpu` or `POML_DEVICE=cuda:0` before `run_devnet.sh`. The launcher
 pins all processes to half of the host's logical CPUs and exposes at most the

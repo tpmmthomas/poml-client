@@ -85,12 +85,20 @@ def deterministic_slots(worker: Any, input_bytes: bytes, count: int) -> list[byt
 def build_inputs(worker: Any, profile: dict[str, Any], input_bytes: bytes) -> tuple[list[Any], bytes]:
     """Build the exact initial noise, step noises and bias maps for one attempt."""
 
+    slots = deterministic_slots(worker, input_bytes, profile["randomness_slots"])
+    return build_inputs_for_slots(worker, profile, input_bytes, slots), slots[0]
+
+
+def build_inputs_for_slots(worker: Any, profile: dict[str, Any], input_bytes: bytes, slots: list[bytes]) -> list[Any]:
+    """Build proof inputs from the attempt's prescribed randomness slots."""
+
     import torch
 
     model = worker.TinyDenoiser(
         bytes.fromhex(profile["model_digest"]), profile["steps"], "cpu", 16, 0
     )
-    slots = deterministic_slots(worker, input_bytes, profile["randomness_slots"])
+    if len(slots) != profile["randomness_slots"]:
+        raise ValueError("the proof attempt has the wrong randomness slot count")
     noises = [model._noise(slot) for slot in slots]
     condition = condition_tensor(torch, input_bytes)
     biases: list[Any] = []
@@ -100,7 +108,7 @@ def build_inputs(worker: Any, profile: dict[str, Any], input_bytes: bytes) -> tu
         )
         bias = model.network.condition(condition) + model.network.timestep(timestep)
         biases.append(bias[:, :, None, None].expand(1, 8, 8, 8).contiguous())
-    return noises + biases, slots[0]
+    return noises + biases
 
 
 def make_graph(torch: Any, runner: Any, steps: int) -> Any:

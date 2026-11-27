@@ -186,18 +186,24 @@ type Winner struct {
 	AttemptID           string
 	MinerID             string
 	ModelID             string
+	ChainID             string
 	ProfileDigest       Hash
+	ProofProfile        string
+	ProofSetupDigest    Hash
 	InputCommitment     Hash
 	Recipient           []byte
 	InferenceVRFPublic  []byte
 	EncryptionVRFPublic []byte
+	EncryptionVRFInput  []byte
 	Parent              Hash
 	PrefixDigest        Hash
 	Rho                 []byte
 	RhoProof            []byte
 	Ciphertext          []byte
+	OutputCommitment    Hash
 	CTicket             uint64
 	TicketHash          Hash
+	ProofBundle         []byte
 	Certificate         []byte
 }
 

@@ -66,6 +66,7 @@ message Witness {
   bytes encryption_public_key = 13;
   bytes attempt_input = 14;
   string chain_id = 15;
+  bytes output_commitment_nonce = 16;
 }
 
 message WorkerResponse {
@@ -82,5 +83,6 @@ message WorkerResponse {
   bytes execution_witness = 11;
   repeated uint32 output_shape = 12;
   optional uint64 cpu_ns = 13; // Observed CPU time for this job, if supported.
+  bytes model_proof = 14; // Optional backend proof carried into the PoML envelope.
 }
 

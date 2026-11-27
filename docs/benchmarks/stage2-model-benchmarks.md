@@ -179,7 +179,17 @@ current CLI decrypt command prints the ciphertext payload as hexadecimal.
 
 ## What is different from the final paper plan
 
-The implementation is deliberately useful before the final ZKP system exists.
+The implementation now has two proof-bearing profiles. The fast auxiliary
+profile checks the complete host-side transcript. The EZKL profile also carries
+a real model proof, while native peer-side EZKL verification is still being
+integrated.
+
+On this host, the three-node `diffusion-small-aux` run measured about 5.9 ms
+wall time and 0.6 ms serving-thread CPU time for the winner certificate after
+the model result was available. A cached EZKL attempt proof took about 15.1 s
+after setup. The first EZKL setup used the previously measured roughly 14.1 s
+setup, 2.4 s SRS generation and a temporary prover key of about 2.6 GiB. The
+launcher used logical CPUs 0-15 and no GPU for these measurements.
 
 - The dummy proof accepts random bytes. The final plan requires a proof of the
   model, VRF, encryption, output commitment, and exact block context.
@@ -189,14 +199,13 @@ The implementation is deliberately useful before the final ZKP system exists.
 - The Gemma adapter runs Hugging Face causal generation with fixed context and
   token limits. The real Gemma weights still need authorized download and a
   frozen manifest digest.
-- Stage 1 still encrypts `output || query_id` and carries the old certificate
-  field. The output-commitment nonce, composite proof bundle, and recursive
-  proof verifier from the final Stage 2 plan are not yet in the block wire
-  format.
+- Legacy profiles still encrypt `output || query_id` and carry the old
+  certificate field. Auxiliary profiles use the versioned proof bundle and
+  encrypted output-commitment nonce.
 - Go still performs the real RFC 9381 VRF and deterministic RFC 9180 HPKE work.
   The Python worker supplies model output and the temporary proof bytes.
 
-In simple terms, the standalone commands can now prove the small diffusion
-core and a bounded Gemma calculation. The distributed node still carries the
-temporary certificate, and MobileDiffusion plus the VRF/HPKE binding relation
-remain unfinished.
+In simple terms, the distributed node can now run the small diffusion model
+with the VRF, commitment and HPKE checks wired into consensus. The EZKL worker
+can carry a real model proof, but the peer-side verifier and MobileDiffusion
+pipeline remain unfinished.

@@ -26,10 +26,14 @@ in genesis, so consensus code does not import a model library.
   leave the CPU sample absent. The node encrypts the result.
 - [The certificate request](../../api/proto/poml.proto) carries purpose, public
   statement, private execution/output/encryption witness and budgets. A
-  genesis-pinned test key signs the statement; independent nodes verify the
-  signature. Use these timings to study scheduling, proof service overhead or
-  injected delay. Model performance and ZKP performance require different
-  workers.
+  genesis-pinned key signs the statement; independent nodes verify the
+  signature. Auxiliary profiles route the request through `pomlproof`, which
+  verifies the input opening, inference VRF, expanded randomness, encryption
+  VRF, hidden output commitment and deterministic HPKE ciphertext before the
+  signature is made. A proof-capable Python worker can also return model proof
+  bytes in the same response. Use these timings to study scheduling, proof
+  service overhead or injected delay. Model performance and ZKP performance
+  require different workers.
 - [The executable](../../cmd/pomlworker/main.go) accepts `--config` with the
   generated node configuration. Set `--inference-delay 50ms` or
   `--proof-delay 20ms` to exercise cancellation. Both default to zero.

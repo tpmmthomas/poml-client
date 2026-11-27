@@ -382,24 +382,25 @@ func (x *WorkerRequest) GetInputCommitment() []byte {
 // fixture returns an opaque execution token and binds a certificate to the
 // exact public statement. It does not implement or attest a model relation.
 type Witness struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	Execution           []byte                 `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
-	Output              []byte                 `protobuf:"bytes,2,opt,name=output,proto3" json:"output,omitempty"`
-	EncryptionVrf       []byte                 `protobuf:"bytes,3,opt,name=encryption_vrf,json=encryptionVrf,proto3" json:"encryption_vrf,omitempty"`
-	EncryptionProof     []byte                 `protobuf:"bytes,4,opt,name=encryption_proof,json=encryptionProof,proto3" json:"encryption_proof,omitempty"`
-	EncryptionInput     []byte                 `protobuf:"bytes,5,opt,name=encryption_input,json=encryptionInput,proto3" json:"encryption_input,omitempty"`
-	Recipient           []byte                 `protobuf:"bytes,6,opt,name=recipient,proto3" json:"recipient,omitempty"`
-	Randomness          [][]byte               `protobuf:"bytes,7,rep,name=randomness,proto3" json:"randomness,omitempty"`
-	Input               []byte                 `protobuf:"bytes,8,opt,name=input,proto3" json:"input,omitempty"`
-	SignedQuery         []byte                 `protobuf:"bytes,9,opt,name=signed_query,json=signedQuery,proto3" json:"signed_query,omitempty"`
-	InferenceVrf        []byte                 `protobuf:"bytes,10,opt,name=inference_vrf,json=inferenceVrf,proto3" json:"inference_vrf,omitempty"`
-	InferenceProof      []byte                 `protobuf:"bytes,11,opt,name=inference_proof,json=inferenceProof,proto3" json:"inference_proof,omitempty"`
-	InferencePublicKey  []byte                 `protobuf:"bytes,12,opt,name=inference_public_key,json=inferencePublicKey,proto3" json:"inference_public_key,omitempty"`
-	EncryptionPublicKey []byte                 `protobuf:"bytes,13,opt,name=encryption_public_key,json=encryptionPublicKey,proto3" json:"encryption_public_key,omitempty"`
-	AttemptInput        []byte                 `protobuf:"bytes,14,opt,name=attempt_input,json=attemptInput,proto3" json:"attempt_input,omitempty"`
-	ChainId             string                 `protobuf:"bytes,15,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Execution             []byte                 `protobuf:"bytes,1,opt,name=execution,proto3" json:"execution,omitempty"`
+	Output                []byte                 `protobuf:"bytes,2,opt,name=output,proto3" json:"output,omitempty"`
+	EncryptionVrf         []byte                 `protobuf:"bytes,3,opt,name=encryption_vrf,json=encryptionVrf,proto3" json:"encryption_vrf,omitempty"`
+	EncryptionProof       []byte                 `protobuf:"bytes,4,opt,name=encryption_proof,json=encryptionProof,proto3" json:"encryption_proof,omitempty"`
+	EncryptionInput       []byte                 `protobuf:"bytes,5,opt,name=encryption_input,json=encryptionInput,proto3" json:"encryption_input,omitempty"`
+	Recipient             []byte                 `protobuf:"bytes,6,opt,name=recipient,proto3" json:"recipient,omitempty"`
+	Randomness            [][]byte               `protobuf:"bytes,7,rep,name=randomness,proto3" json:"randomness,omitempty"`
+	Input                 []byte                 `protobuf:"bytes,8,opt,name=input,proto3" json:"input,omitempty"`
+	SignedQuery           []byte                 `protobuf:"bytes,9,opt,name=signed_query,json=signedQuery,proto3" json:"signed_query,omitempty"`
+	InferenceVrf          []byte                 `protobuf:"bytes,10,opt,name=inference_vrf,json=inferenceVrf,proto3" json:"inference_vrf,omitempty"`
+	InferenceProof        []byte                 `protobuf:"bytes,11,opt,name=inference_proof,json=inferenceProof,proto3" json:"inference_proof,omitempty"`
+	InferencePublicKey    []byte                 `protobuf:"bytes,12,opt,name=inference_public_key,json=inferencePublicKey,proto3" json:"inference_public_key,omitempty"`
+	EncryptionPublicKey   []byte                 `protobuf:"bytes,13,opt,name=encryption_public_key,json=encryptionPublicKey,proto3" json:"encryption_public_key,omitempty"`
+	AttemptInput          []byte                 `protobuf:"bytes,14,opt,name=attempt_input,json=attemptInput,proto3" json:"attempt_input,omitempty"`
+	ChainId               string                 `protobuf:"bytes,15,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
+	OutputCommitmentNonce []byte                 `protobuf:"bytes,16,opt,name=output_commitment_nonce,json=outputCommitmentNonce,proto3" json:"output_commitment_nonce,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *Witness) Reset() {
@@ -537,6 +538,13 @@ func (x *Witness) GetChainId() string {
 	return ""
 }
 
+func (x *Witness) GetOutputCommitmentNonce() []byte {
+	if x != nil {
+		return x.OutputCommitmentNonce
+	}
+	return nil
+}
+
 type WorkerResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	RequestId        string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -551,7 +559,8 @@ type WorkerResponse struct {
 	ResultDigest     []byte                 `protobuf:"bytes,10,opt,name=result_digest,json=resultDigest,proto3" json:"result_digest,omitempty"`
 	ExecutionWitness []byte                 `protobuf:"bytes,11,opt,name=execution_witness,json=executionWitness,proto3" json:"execution_witness,omitempty"`
 	OutputShape      []uint32               `protobuf:"varint,12,rep,packed,name=output_shape,json=outputShape,proto3" json:"output_shape,omitempty"`
-	CpuNs            *uint64                `protobuf:"varint,13,opt,name=cpu_ns,json=cpuNs,proto3,oneof" json:"cpu_ns,omitempty"` // Observed CPU time for this job, if supported.
+	CpuNs            *uint64                `protobuf:"varint,13,opt,name=cpu_ns,json=cpuNs,proto3,oneof" json:"cpu_ns,omitempty"`         // Observed CPU time for this job, if supported.
+	ModelProof       []byte                 `protobuf:"bytes,14,opt,name=model_proof,json=modelProof,proto3" json:"model_proof,omitempty"` // Optional backend proof carried into the PoML envelope.
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -677,6 +686,13 @@ func (x *WorkerResponse) GetCpuNs() uint64 {
 	return 0
 }
 
+func (x *WorkerResponse) GetModelProof() []byte {
+	if x != nil {
+		return x.ModelProof
+	}
+	return nil
+}
+
 var File_api_proto_poml_proto protoreflect.FileDescriptor
 
 const file_api_proto_poml_proto_rawDesc = "" +
@@ -722,7 +738,7 @@ const file_api_proto_poml_proto_rawDesc = "" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tINFERENCE\x10\x01\x12\x0f\n" +
-	"\vCERTIFICATE\x10\x02\"\xa7\x04\n" +
+	"\vCERTIFICATE\x10\x02\"\xdf\x04\n" +
 	"\aWitness\x12\x1c\n" +
 	"\texecution\x18\x01 \x01(\fR\texecution\x12\x16\n" +
 	"\x06output\x18\x02 \x01(\fR\x06output\x12%\n" +
@@ -741,7 +757,8 @@ const file_api_proto_poml_proto_rawDesc = "" +
 	"\x14inference_public_key\x18\f \x01(\fR\x12inferencePublicKey\x122\n" +
 	"\x15encryption_public_key\x18\r \x01(\fR\x13encryptionPublicKey\x12#\n" +
 	"\rattempt_input\x18\x0e \x01(\fR\fattemptInput\x12\x19\n" +
-	"\bchain_id\x18\x0f \x01(\tR\achainId\"\xb6\x03\n" +
+	"\bchain_id\x18\x0f \x01(\tR\achainId\x126\n" +
+	"\x17output_commitment_nonce\x18\x10 \x01(\fR\x15outputCommitmentNonce\"\xd7\x03\n" +
 	"\x0eWorkerResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x0e\n" +
@@ -758,7 +775,9 @@ const file_api_proto_poml_proto_rawDesc = "" +
 	" \x01(\fR\fresultDigest\x12+\n" +
 	"\x11execution_witness\x18\v \x01(\fR\x10executionWitness\x12!\n" +
 	"\foutput_shape\x18\f \x03(\rR\voutputShape\x12\x1a\n" +
-	"\x06cpu_ns\x18\r \x01(\x04H\x00R\x05cpuNs\x88\x01\x01B\t\n" +
+	"\x06cpu_ns\x18\r \x01(\x04H\x00R\x05cpuNs\x88\x01\x01\x12\x1f\n" +
+	"\vmodel_proof\x18\x0e \x01(\fR\n" +
+	"modelProofB\t\n" +
 	"\a_cpu_nsB-Z+github.com/thomas/poml-node/api/proto;protob\x06proto3"
 
 var (

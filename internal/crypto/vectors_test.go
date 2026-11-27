@@ -100,3 +100,42 @@ func TestPoMLPrescribedCoins(t *testing.T) {
 		t.Fatal("wrong chain opened ciphertext")
 	}
 }
+
+func TestBoundOutputCommitmentRoundTrip(t *testing.T) {
+	data, err := os.ReadFile("testdata/poml-output.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v map[string]string
+	if err := json.Unmarshal(data, &v); err != nil {
+		t.Fatal(err)
+	}
+	parent, err := types.ParseHash(v["parent"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	winner := types.Winner{ModelID: v["profile"], Parent: parent, QueryID: v["qid"], AttemptID: v["attempt_id"]}
+	coins := unhex(t, v["encryption_vrf"])
+	nonce, err := CommitmentNonce(v["chain_id"], winner, coins)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := unhex(t, v["output"])
+	winner.OutputCommitment = OutputCommitment(nonce, output)
+	ciphertext, err := SealOutputBound(unhex(t, v["recipient_public"]), coins, v["chain_id"], winner, nonce, output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	winner.Ciphertext = ciphertext
+	opened, openedNonce, err := OpenOutputBound(unhex(t, v["recipient_private"]), v["chain_id"], winner)
+	if err != nil || !bytes.Equal(opened, output) || !bytes.Equal(openedNonce, nonce) {
+		t.Fatalf("bound round trip: %x %x %v", opened, openedNonce, err)
+	}
+	if OutputCommitment(openedNonce, opened) != winner.OutputCommitment {
+		t.Fatal("output commitment did not open")
+	}
+	opened[0] ^= 1
+	if OutputCommitment(openedNonce, opened) == winner.OutputCommitment {
+		t.Fatal("changed output retained commitment")
+	}
+}

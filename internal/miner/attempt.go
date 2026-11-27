@@ -13,6 +13,7 @@ import (
 	cryptoutil "github.com/thomas/poml-node/internal/crypto"
 	"github.com/thomas/poml-node/internal/types"
 	"github.com/thomas/poml-node/internal/worker"
+	"github.com/thomas/poml-node/profiles"
 )
 
 type attemptResult struct {
@@ -25,10 +26,14 @@ type attemptResult struct {
 func (m *Miner) attempt(ctx context.Context, parent, prefix types.Hash, q types.Query, id, purpose string) attemptResult {
 	w := types.Winner{
 		Parent: parent, PrefixDigest: prefix, MinerID: m.config.MinerID,
-		ModelID: m.config.Model.ID, QueryID: q.ID, AttemptID: id,
+		ModelID: m.config.Model.ID, ChainID: m.config.Genesis.Raw.ChainID, QueryID: q.ID, AttemptID: id,
 		CTicket: m.config.Model.TicketWeight,
 	}
 	w.ProfileDigest = m.config.Model.Digest()
+	if m.config.Model.UsesProofBundle() {
+		w.ProofProfile = m.config.Model.CertificateProfile
+		w.ProofSetupDigest = w.ProfileDigest
+	}
 	w.InputCommitment, w.Recipient = q.Commitment, q.Recipient
 	requestID := purpose + "/" + id
 	log := func(kind, status, reason string, fields map[string]any) {
@@ -65,7 +70,18 @@ func (m *Miner) attempt(ctx context.Context, parent, prefix types.Hash, q types.
 		return attemptResult{candidate: w, err: err}
 	}
 	w.EncryptionVRFPublic = encryptionKey
-	w.Ciphertext, err = cryptoutil.SealOutput(q.Recipient, coins, m.config.Genesis.Raw.ChainID, w, result.Output)
+	w.EncryptionVRFInput = encInput[:]
+	var commitmentNonce []byte
+	if m.config.Model.UsesProofBundle() {
+		commitmentNonce, err = cryptoutil.CommitmentNonce(m.config.Genesis.Raw.ChainID, w, coins)
+		if err != nil {
+			return attemptResult{candidate: w, err: err}
+		}
+		w.OutputCommitment = cryptoutil.OutputCommitment(commitmentNonce, result.Output)
+		w.Ciphertext, err = cryptoutil.SealOutputBound(q.Recipient, coins, m.config.Genesis.Raw.ChainID, w, commitmentNonce, result.Output)
+	} else {
+		w.Ciphertext, err = cryptoutil.SealOutput(q.Recipient, coins, m.config.Genesis.Raw.ChainID, w, result.Output)
+	}
 	if err != nil {
 		return attemptResult{candidate: w, err: err}
 	}
@@ -83,7 +99,7 @@ func (m *Miner) attempt(ctx context.Context, parent, prefix types.Hash, q types.
 		Randomness: slots, Input: q.Input, SignedQuery: q.SignedTx, InferenceVrf: rho,
 		InferenceProof: proof, InferencePublicKey: inferenceKey,
 		EncryptionPublicKey: encryptionKey, AttemptInput: input,
-		ChainId: m.config.Genesis.Raw.ChainID,
+		ChainId: m.config.Genesis.Raw.ChainID, OutputCommitmentNonce: commitmentNonce,
 	}
 	log("attempt_finish", "complete", "ticket checked", map[string]any{
 		"ticket_hash": w.TicketHash.String(), "wall_ns": time.Since(started).Nanoseconds(),
@@ -132,10 +148,11 @@ func (m *Miner) CertifyChallenge(ctx context.Context, q types.Query, response ty
 	if w.TicketHash != response.TicketHash || !bytes.Equal(w.Ciphertext, response.Ciphertext) {
 		return nil, errors.New("replayed result differs from claimed response")
 	}
-	return m.certify(ctx, "challenge", w, statement, result.witness)
+	certificate, _, err := m.certify(ctx, "challenge", w, statement, result.witness)
+	return certificate, err
 }
 
-func (m *Miner) certify(ctx context.Context, purpose string, w types.Winner, statement []byte, witness *pb.Witness) ([]byte, error) {
+func (m *Miner) certify(ctx context.Context, purpose string, w types.Winner, statement []byte, witness *pb.Witness) ([]byte, []byte, error) {
 	fields := map[string]any{
 		"attempt_id": w.AttemptID, "qid": w.QueryID, "parent_hash": w.Parent.String(),
 		"request_id": purpose + "/" + w.AttemptID, "purpose": purpose,
@@ -144,22 +161,35 @@ func (m *Miner) certify(ctx context.Context, purpose string, w types.Winner, sta
 	m.record("proof_queue", "queued", "certificate request assembled", fields)
 	m.record("proof_start", "started", "configured proof worker requested", fields)
 	started := time.Now()
-	cert, timing, err := m.config.Worker.Certify(ctx, m.config.Model, purpose+"/"+w.AttemptID, purpose, statement, witness)
+	cert, modelProof, timing, err := m.certifyWorker(ctx, purpose, w, statement, witness)
 	if err == nil && !m.config.Model.AcceptsRandomProof() {
 		err = cryptoutil.Verify(m.config.Genesis.CertificatePublic, cert, "certificate", statement)
 	}
 	fields["wall_ns"], fields["certification_ns"], fields["C_cert"] = time.Since(started).Nanoseconds(), timing.Duration.Nanoseconds(), 1
+	fields["model_proof_bytes"] = len(modelProof)
 	if timing.CPUNanos != nil {
 		fields["cpu_ns"] = *timing.CPUNanos
 	}
 	if err != nil {
 		m.record("proof_failure", "failed", err.Error(), fields)
-		return nil, err
+		return nil, nil, err
 	}
 	reason := "certificate verified"
 	if m.config.Model.AcceptsRandomProof() {
 		reason = "dummy proof accepted by configured policy"
 	}
 	m.record("proof_finish", "complete", reason, fields)
-	return cert, nil
+	return cert, modelProof, nil
+}
+
+func (m *Miner) certifyWorker(ctx context.Context, purpose string, w types.Winner, statement []byte, witness *pb.Witness) ([]byte, []byte, worker.Timing, error) {
+	id := purpose + "/" + w.AttemptID
+	if backend, ok := m.config.Worker.(interface {
+		CertifyWithProof(context.Context, profiles.Spec, string, string, []byte, *pb.Witness) (worker.CertificateResult, error)
+	}); ok {
+		result, err := backend.CertifyWithProof(ctx, m.config.Model, id, purpose, statement, witness)
+		return result.Certificate, result.ModelProof, result.Timing, err
+	}
+	certificate, timing, err := m.config.Worker.Certify(ctx, m.config.Model, id, purpose, statement, witness)
+	return certificate, nil, timing, err
 }

@@ -48,6 +48,14 @@ type Timing struct {
 	CPUNanos *uint64
 }
 
+// CertificateResult separates the statement binding signature from an
+// optional model proof produced by a real backend.
+type CertificateResult struct {
+	Certificate []byte
+	ModelProof  []byte
+	Timing
+}
+
 // Infer checks the profile, actual output length, digest and opaque witness returned by a worker.
 func (c Client) Infer(ctx context.Context, r InferenceRequest) (InferenceResult, error) {
 	model, err := types.ParseHash(r.Spec.ModelDigest)
@@ -79,18 +87,27 @@ func (c Client) Infer(ctx context.Context, r InferenceRequest) (InferenceResult,
 // Certify supplies public bytes and private witness to a separately replaceable
 // prover. The caller independently verifies the result with the genesis public key.
 func (c Client) Certify(ctx context.Context, spec profiles.Spec, id, purpose string, statement []byte, wit *pb.Witness) ([]byte, Timing, error) {
+	result, err := c.CertifyWithProof(ctx, spec, id, purpose, statement, wit)
+	return result.Certificate, result.Timing, err
+}
+
+// CertifyWithProof is the extended worker call used by Stage 2 proof
+// profiles. Legacy callers can keep using Certify and receive only the
+// statement binding certificate.
+func (c Client) CertifyWithProof(ctx context.Context, spec profiles.Spec, id, purpose string, statement []byte, wit *pb.Witness) (CertificateResult, error) {
 	request := baseRequest(id, spec)
 	request.Kind = pb.WorkerRequest_CERTIFICATE
 	request.Purpose, request.Statement, request.Witness = purpose, statement, wit
 	reply, err := c.call(ctx, request)
 	if err != nil {
-		return nil, Timing{}, err
+		return CertificateResult{}, err
 	}
 	digest := types.HashBytes("worker-certificate", reply.Certificate)
 	if len(reply.Certificate) == 0 || !bytes.Equal(reply.ResultDigest, digest[:]) {
-		return nil, Timing{}, errors.New("worker certificate digest mismatch")
+		return CertificateResult{}, errors.New("worker certificate digest mismatch")
 	}
-	return reply.Certificate, Timing{Duration: time.Duration(reply.DurationNs), CPUNanos: reply.CpuNs}, nil
+	return CertificateResult{Certificate: reply.Certificate, ModelProof: reply.ModelProof,
+		Timing: Timing{Duration: time.Duration(reply.DurationNs), CPUNanos: reply.CpuNs}}, nil
 }
 
 func baseRequest(id string, spec profiles.Spec) *pb.WorkerRequest {

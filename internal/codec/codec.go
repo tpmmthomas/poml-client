@@ -78,18 +78,24 @@ func (w *writer) winner(winner types.Winner) {
 	w.string(winner.AttemptID)
 	w.string(winner.MinerID)
 	w.string(winner.ModelID)
+	w.string(winner.ChainID)
 	w.hash(winner.ProfileDigest)
+	w.string(winner.ProofProfile)
+	w.hash(winner.ProofSetupDigest)
 	w.hash(winner.InputCommitment)
 	w.bytes(winner.Recipient)
 	w.bytes(winner.InferenceVRFPublic)
 	w.bytes(winner.EncryptionVRFPublic)
+	w.bytes(winner.EncryptionVRFInput)
 	w.hash(winner.Parent)
 	w.hash(winner.PrefixDigest)
 	w.bytes(winner.Rho)
 	w.bytes(winner.RhoProof)
 	w.bytes(winner.Ciphertext)
+	w.hash(winner.OutputCommitment)
 	w.u64(winner.CTicket)
 	w.hash(winner.TicketHash)
+	w.bytes(winner.ProofBundle)
 	w.bytes(winner.Certificate)
 }
 
@@ -201,10 +207,43 @@ func WinnerStatement(block types.Block) []byte {
 	w.hash(block.Header.PrefixDigest)
 	w.hash(block.Header.ClaimDigest)
 	winner := block.Winner
-	// The certificate signs the statement and therefore cannot sign itself.
+	// Proof bytes and the legacy certificate sign the statement and therefore
+	// cannot sign themselves. The envelope is checked against this same digest.
+	winner.ProofBundle = nil
 	winner.Certificate = nil
 	w.winner(winner)
 	return w.Bytes()
+}
+
+// DecodeWinnerStatement parses the public statement supplied to a prover.
+// The returned block contains only the header fields that participate in the
+// statement and a winner with proof bytes cleared.
+func DecodeWinnerStatement(data []byte) (types.Block, error) {
+	r := &reader{bytes.NewReader(data)}
+	var block types.Block
+	var err error
+	if block.Header.Parent, err = r.hash(); err != nil {
+		return block, err
+	}
+	if block.Header.Height, err = r.u64(); err != nil {
+		return block, err
+	}
+	if block.Header.Producer, err = r.string(); err != nil {
+		return block, err
+	}
+	if block.Header.PrefixDigest, err = r.hash(); err != nil {
+		return block, err
+	}
+	if block.Header.ClaimDigest, err = r.hash(); err != nil {
+		return block, err
+	}
+	if block.Winner, err = r.winner(); err != nil {
+		return block, err
+	}
+	if r.Len() != 0 || len(block.Winner.ProofBundle) != 0 || len(block.Winner.Certificate) != 0 {
+		return types.Block{}, errors.New("invalid winner statement")
+	}
+	return block, nil
 }
 
 func BlockUnsignedBytes(block types.Block) []byte {
@@ -369,7 +408,16 @@ func (r *reader) winner() (types.Winner, error) {
 	if winner.ModelID, err = r.string(); err != nil {
 		return winner, err
 	}
+	if winner.ChainID, err = r.string(); err != nil {
+		return winner, err
+	}
 	if winner.ProfileDigest, err = r.hash(); err != nil {
+		return winner, err
+	}
+	if winner.ProofProfile, err = r.string(); err != nil {
+		return winner, err
+	}
+	if winner.ProofSetupDigest, err = r.hash(); err != nil {
 		return winner, err
 	}
 	if winner.InputCommitment, err = r.hash(); err != nil {
@@ -382,6 +430,9 @@ func (r *reader) winner() (types.Winner, error) {
 		return winner, err
 	}
 	if winner.EncryptionVRFPublic, err = r.bytes(); err != nil {
+		return winner, err
+	}
+	if winner.EncryptionVRFInput, err = r.bytes(); err != nil {
 		return winner, err
 	}
 	if winner.Parent, err = r.hash(); err != nil {
@@ -399,10 +450,16 @@ func (r *reader) winner() (types.Winner, error) {
 	if winner.Ciphertext, err = r.bytes(); err != nil {
 		return winner, err
 	}
+	if winner.OutputCommitment, err = r.hash(); err != nil {
+		return winner, err
+	}
 	if winner.CTicket, err = r.u64(); err != nil {
 		return winner, err
 	}
 	if winner.TicketHash, err = r.hash(); err != nil {
+		return winner, err
+	}
+	if winner.ProofBundle, err = r.bytes(); err != nil {
 		return winner, err
 	}
 	if winner.Certificate, err = r.bytes(); err != nil {

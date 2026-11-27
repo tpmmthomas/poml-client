@@ -18,8 +18,10 @@ Every block has an ordered **prefix** and a late **response suffix**.
   transactions. Only one response for a query can be retained in a round,
   because the ledger permits one pending claimant per query. A winning answer
   supersedes an earlier local losing response for the same query.
-- The winner carries one certificate. The certificate covers the winner, the
-  frozen prefix digest and the complete response-suffix digest.
+- A legacy fixture winner carries one certificate. An auxiliary winner carries
+  a versioned proof bundle whose binding certificate covers the winner, the
+  frozen prefix digest and the complete response-suffix digest. The bundle also
+  carries the model proof bytes and their setup/profile digest.
 - A response transaction is a special service claim. It uses its signed query
   and attempt context for identity and does not consume an ordinary account
   nonce. This lets one miner answer several queries in one block.
@@ -63,10 +65,17 @@ duplicate response observations.
 - User output uses RFC 9180 Base HPKE with X25519, HKDF-SHA256 and AES-256-GCM.
   The encryption VRF output deterministically supplies the ephemeral key.
 
-The exact Go dependencies and versions are pinned in `go.mod`. The worker
-certificate is intentionally a test certificate. It proves that the client
-verified a certificate over the public statement, not that a model relation or
-zero-knowledge proof has been implemented.
+Auxiliary profiles derive a hidden 32-byte output-commitment nonce from the
+private encryption-VRF output. The encrypted payload carries that nonce so the
+user can recompute the tagged SHA-256 output commitment.
+
+The exact Go dependencies and versions are pinned in `go.mod`. The
+`aux-ed25519-v1` certificate is a transcript-checking integration profile. It
+proves that the local prover checked the worker witness, both VRFs, the output
+commitment and deterministic HPKE ciphertext before signing. It is not itself a
+zero-knowledge proof. The `zk-ezkl-diffusion-v1` profile carries a real EZKL
+model proof in the same envelope, while a native peer-side EZKL verifier is a
+separate backend adapter.
 
 ## Replaceable worker boundary
 

@@ -14,6 +14,7 @@ import (
 	cryptoutil "github.com/thomas/poml-node/internal/crypto"
 	"github.com/thomas/poml-node/internal/events"
 	"github.com/thomas/poml-node/internal/profile"
+	proofutil "github.com/thomas/poml-node/internal/proof"
 	"github.com/thomas/poml-node/internal/state"
 	"github.com/thomas/poml-node/internal/store"
 	"github.com/thomas/poml-node/internal/types"
@@ -299,7 +300,7 @@ func (c *Chain) validateBlock(block types.Block, blockID types.Hash, parent type
 		}
 	}
 	winner := block.Winner
-	if winner.Parent != block.Header.Parent || winner.PrefixDigest != block.Header.PrefixDigest || winner.ModelID != c.genesis.Raw.ModelProfileID || winner.ProfileDigest != c.genesis.Raw.Model.Digest() {
+	if winner.Parent != block.Header.Parent || winner.PrefixDigest != block.Header.PrefixDigest || winner.ModelID != c.genesis.Raw.ModelProfileID || winner.ChainID != c.genesis.Raw.ChainID || winner.ProfileDigest != c.genesis.Raw.Model.Digest() {
 		return errors.New("winner context mismatch")
 	}
 	query, queryFound := queryContext(parent, block.Prefix, winner.QueryID)
@@ -316,6 +317,21 @@ func (c *Chain) validateBlock(block types.Block, blockID types.Hash, parent type
 	if err := cryptoutil.VRFVerify(miner.InferenceVRFPub, attemptInput, winner.Rho, winner.RhoProof); err != nil {
 		return fmt.Errorf("winner VRF: %w", err)
 	}
+	if c.genesis.Raw.Model.UsesProofBundle() {
+		if winner.ProofProfile != c.genesis.Raw.Model.CertificateProfile || winner.ProofSetupDigest != c.genesis.Raw.Model.Digest() {
+			return errors.New("winner proof profile or setup digest mismatch")
+		}
+		expectedEncryptionInput := types.HashBytes("encryption-input", attemptInput)
+		if !bytes.Equal(winner.EncryptionVRFInput, expectedEncryptionInput[:]) {
+			return errors.New("encryption VRF input mismatch")
+		}
+		if winner.OutputCommitment == (types.Hash{}) {
+			return errors.New("winner output commitment is empty")
+		}
+		if len(winner.Ciphertext) < 32 {
+			return errors.New("winner ciphertext is empty")
+		}
+	}
 	if expected := types.HashBytes("ticket", codec.TicketBytes(winner)); expected != winner.TicketHash || winner.TicketHash != block.Header.TicketHash {
 		return errors.New("winner ticket hash mismatch")
 	}
@@ -326,6 +342,16 @@ func (c *Chain) validateBlock(block types.Block, blockID types.Hash, parent type
 	if c.genesis.Raw.Model.AcceptsRandomProof() {
 		if len(winner.Certificate) == 0 {
 			return errors.New("dummy proof is empty")
+		}
+	} else if c.genesis.Raw.Model.UsesProofBundle() {
+		if len(winner.ProofBundle) == 0 {
+			return errors.New("winner proof bundle is empty")
+		}
+		if len(winner.Certificate) != 0 {
+			return errors.New("auxiliary winner still carries a legacy certificate")
+		}
+		if _, err := proofutil.VerifyBundle(winner.ProofBundle, winner.ProofProfile, winner.ProofSetupDigest, codec.WinnerStatement(block), c.genesis.CertificatePublic); err != nil {
+			return fmt.Errorf("winner proof bundle: %w", err)
 		}
 	} else if err := cryptoutil.Verify(c.genesis.CertificatePublic, winner.Certificate, "certificate", codec.WinnerStatement(block)); err != nil {
 		return fmt.Errorf("winner certificate: %w", err)

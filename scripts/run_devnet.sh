@@ -6,6 +6,7 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$run_dir/bin"
 go build -o "$run_dir/bin/pomld" ./cmd/pomld
 go build -o "$run_dir/bin/pomlworker" ./cmd/pomlworker
+go build -o "$run_dir/bin/pomlproof" ./cmd/pomlproof
 go build -o "$run_dir/bin/pomlctl" ./cmd/pomlctl
 
 model_id=$(python3 - "$run_dir/genesis.json" <<'PY'
@@ -42,13 +43,10 @@ if [ -n "${POML_MODEL_REF:-}" ]; then
   model_ref_args=(--model-ref "$POML_MODEL_REF")
 fi
 
-certificate_key=""
-if [ "$model_backend" = "fixture" ]; then
-  certificate_key=$(awk -F' = ' '$1 == "certificate_private_key_hex" {gsub(/"/, "", $2); print $2}' "$run_dir/node-0.toml")
-  if [ -z "$certificate_key" ]; then
-    echo "node-0.toml has no certificate_private_key_hex" >&2
-    exit 1
-  fi
+certificate_key=$(awk -F' = ' '$1 == "certificate_private_key_hex" {gsub(/"/, "", $2); print $2}' "$run_dir/node-0.toml")
+if [ -z "$certificate_key" ]; then
+  echo "node-0.toml has no certificate_private_key_hex" >&2
+  exit 1
 fi
 
 for config in "$run_dir"/node-*.toml; do
@@ -64,6 +62,8 @@ for config in "$run_dir"/node-*.toml; do
     nohup taskset -c "$process_cpu_set" "$python_bin" "$repo_dir/stage2/model_worker.py" \
       --socket "$socket" --profile-id "$model_id" --profiles-dir "$repo_dir/profiles" \
       --device "$worker_device" --threads "$worker_threads" --cpu-start "$cpu_start" \
+      --aux-helper "$run_dir/bin/pomlproof" --certificate-private-key-hex "$certificate_key" \
+      --proof-cache-dir "$run_dir/proof-cache-$node_index" \
       "${model_ref_args[@]}" \
       >"$run_dir/worker-${node_index}.log" 2>&1 </dev/null &
   fi

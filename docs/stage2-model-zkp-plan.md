@@ -10,10 +10,11 @@ cryptographic binding relation, proof verification, and migration of the Stage
 
 This document began as a design study. The repository now contains the first
 Stage 2 execution slice behind the existing private worker protocol. It has a
-dummy backend, a deterministic small diffusion backend, a Gemma adapter, and
-the explicitly insecure random-proof compatibility profile. A production
-model proof and the final binding proof are still future work. The Stage 1 Go
-node remains the reference client and validates the temporary proof policy
+dummy backend, a deterministic small diffusion backend, a Gemma adapter, a
+versioned proof envelope, a host-side auxiliary transcript checker, and an
+opt-in EZKL attempt prover. A native peer-side model-proof verifier and the
+final composed binding proof are still future work. The Stage 1 Go node remains
+the reference client and validates the auxiliary statement and envelope
 through the same block path.
 
 ## Executive decision
@@ -1121,14 +1122,16 @@ memory-aware scheduler with separate inference and proof queues. The scheduler
 can change how many attempts a local machine runs at once. It cannot change the
 meaning of one attempt or hide the proof delay from the experiment metrics.
 
-The current implementation covers M0 and the execution portion of M1. The
-profiles, Python worker, generated Python protobuf module, constrained launcher,
-unit tests, multi-process devnet runs, and benchmark report are in this
-repository. M2 resource-aware scheduling is represented by CPU affinity,
-Torch thread limits, one-model-execution-at-a-time admission, and measured
-worker fields. It is not yet the final memory-token scheduler described above.
-M3 through M5 remain planned work. In particular, `dummy-random-v1` is a
-development escape hatch and carries no model or zero-knowledge soundness.
+The current implementation covers M0, the execution portion of M1, the
+versioned envelope, and the host-side part of M3. The profiles, Python worker,
+generated Python protobuf module, constrained launcher, unit tests,
+multi-process devnet runs, and benchmark report are in this repository. M2
+resource-aware scheduling is represented by CPU affinity, Torch thread limits,
+one-model-execution-at-a-time admission, and measured worker fields. It is not
+yet the final memory-token scheduler described above. The native peer-side
+EZKL verifier, Rust binding guest and recursive composition remain M4-M5 work.
+In particular, `dummy-random-v1` is a development escape hatch and carries no
+model or zero-knowledge soundness.
 The small diffusion vector is stable across the tested CPU and `cuda:0` paths.
 The Gemma adapter currently has CPU-fp32 and GPU-fp16 sampling paths, so a
 consensus run must pin one device and precision until a cross-device canonical

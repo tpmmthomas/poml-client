@@ -2,8 +2,9 @@
 
 `model_worker.py` is the Python side of the existing Go worker protocol. The
 Go node still owns consensus, VRFs, deterministic HPKE encryption, ticket
-selection and block validation. This process only receives a validated model
-request and returns canonical output bytes or a certificate object.
+selection and block validation. This process receives a validated model
+request and returns canonical output bytes, a binding certificate, and an
+optional model proof object.
 
 ## Select a backend
 
@@ -12,6 +13,8 @@ The genesis profile selects the backend for every node in a run.
 ```bash
 go run ./cmd/pomlctl init-devnet --dir run/dummy --nodes 1 --model dummy
 go run ./cmd/pomlctl init-devnet --dir run/diffusion --nodes 1 --model diffusion-small
+go run ./cmd/pomlctl init-devnet --dir run/diffusion-aux --nodes 1 --model diffusion-small-aux
+go run ./cmd/pomlctl init-devnet --dir run/diffusion-ezkl --nodes 1 --model diffusion-small-ezkl
 go run ./cmd/pomlctl init-devnet --dir run/gemma --nodes 1 --model gemma3-1b
 ```
 
@@ -35,6 +38,13 @@ insecure.
 allocates one initial-noise slot and one slot for each of four denoising steps.
 The output is 64 quantized bytes. The network weights are seeded from the
 profile digest, so a clean install recreates the same reference model.
+
+`diffusion-small-aux` uses the same model and routes proof requests through the
+Go `pomlproof` helper. The helper checks the private PoML transcript before
+signing the proof envelope. `diffusion-small-ezkl` additionally runs
+`ezkl_attempt.py` and puts its verified EZKL proof JSON in the envelope. Its
+first setup can consume several minutes and roughly gigabytes of temporary
+prover-key storage on this host.
 
 `gemma3-1b` uses Hugging Face `google/gemma-3-1b-it`, a 512-token input limit
 and at most 16 sampled output tokens. The canonical output is big-endian
@@ -110,10 +120,9 @@ memory, timing and the authorized-checkpoint limitation.
 
 ## Boundary with the final paper
 
-The socket worker still carries the temporary random certificate through the
-Stage 1 block path. The new proof commands prove model calculations offline,
-but they do not yet replace that certificate. A complete winner proof still
-needs the output commitment, VRF, HPKE and block-context binding relation from
-`docs/stage2-model-zkp-plan.md`. Until that proof bundle is wired into the Go
-validator, a successful block demonstrates plumbing and timing, not complete
-PoML proof soundness.
+The `aux-ed25519-v1` profile now wires the output commitment, VRF, HPKE and
+block-context binding relation into the Go validator. The `zk-ezkl-diffusion-v1`
+profile also carries a real model proof. A trusted peer-side EZKL verifier and
+the final composed zero-knowledge relation from
+`docs/stage2-model-zkp-plan.md` are still required before that profile is a
+fully trustless model-proof consensus rule.

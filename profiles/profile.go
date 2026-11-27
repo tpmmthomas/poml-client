@@ -87,15 +87,39 @@ func (s Spec) AcceptsRandomProof() bool {
 	return s.CertificateProfile == "dummy-random-v1"
 }
 
+// UsesProofBundle selects the versioned Stage 2 envelope. Legacy fixture
+// certificates keep their original wire shape so old Stage 1 vectors remain
+// readable. New model profiles should use an explicit aux- or zk- prefix.
+func (s Spec) UsesProofBundle() bool {
+	return strings.HasPrefix(s.CertificateProfile, "aux-") || strings.HasPrefix(s.CertificateProfile, "zk-")
+}
+
+// ProofReserveBytes keeps suffix selection conservative before a worker has
+// returned its proof. It is an operational bound, not a cryptographic input.
+func (s Spec) ProofReserveBytes() int {
+	switch s.CertificateProfile {
+	case "zk-ezkl-diffusion-v1":
+		return 128 << 10
+	case "aux-ed25519-v1":
+		return 1024
+	default:
+		return 64
+	}
+}
+
 //go:embed *.json
 var fixtures embed.FS
 
-// Fixture loads one of the two shipped deterministic worker profiles.
+// Fixture loads a shipped profile implemented by the Go deterministic worker.
 func Fixture(id string) (Spec, error) {
-	if id != "fixture-a" && id != "fixture-b" {
-		return Spec{}, fmt.Errorf("unknown fixture %q", id)
+	spec, err := Load(id)
+	if err != nil {
+		return Spec{}, err
 	}
-	return Load(id)
+	if spec.BackendName() != "fixture" {
+		return Spec{}, fmt.Errorf("profile %q is not a fixture", id)
+	}
+	return spec, nil
 }
 
 // Load reads any shipped model profile by its consensus ID.

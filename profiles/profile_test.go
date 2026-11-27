@@ -54,6 +54,15 @@ func TestStage2ProfilesAndProofMode(t *testing.T) {
 			t.Fatalf("invalid stage 2 profile %s", id)
 		}
 	}
+	for _, id := range []string{"fixture-a-aux", "diffusion-small-aux", "diffusion-small-ezkl", "gemma3-1b-aux"} {
+		spec, err := Load(id)
+		if err != nil {
+			t.Fatalf("load %s: %v", id, err)
+		}
+		if spec.AcceptsRandomProof() || !spec.UsesProofBundle() || spec.Digest() == (types.Hash{}) {
+			t.Fatalf("invalid proof-bearing profile %s", id)
+		}
+	}
 	fixture, err := Fixture("fixture-a")
 	if err != nil {
 		t.Fatal(err)

@@ -7,10 +7,10 @@ fixture worker remains available, and the Stage 2 Python worker can run the
 dummy, small diffusion and Gemma profiles through the same protobuf boundary.
 
 Stage 1 measures node, network, storage, cryptographic plumbing and ledger
-behaviour. The certificate returned by the fixture worker is an Ed25519 test
-certificate. Stage 2 adds model execution and an explicitly insecure random
-proof mode for plumbing tests. Neither temporary certificate mode proves model
-correctness or zero knowledge.
+behaviour. The `*-aux` profiles add the PoML transcript checks and a versioned
+proof envelope. The `diffusion-small-ezkl` profile also carries a real EZKL
+proof, but its setup is expensive and peer-side EZKL verification remains an
+explicit backend integration step.
 
 ## Quick start
 
@@ -39,9 +39,13 @@ go run ./cmd/pomlctl init-devnet --dir run/devnet --nodes 3
 ./scripts/run_devnet.sh run/devnet
 ```
 
-Pass `--model dummy`, `--model diffusion-small` or `--model gemma3-1b` to
-select a Stage 2 profile. `dummy` is the easiest first run. The small
-diffusion profile is self-contained. The Gemma profile needs an authorized
+Pass `--model dummy`, `--model diffusion-small`, `--model diffusion-small-aux`,
+`--model diffusion-small-ezkl` or `--model gemma3-1b` to select a Stage 2
+profile. `dummy` is the easiest first run. The small diffusion profile is
+self-contained. The `diffusion-small-aux` profile runs the real model and
+checks the full VRF, commitment and HPKE transcript. The `diffusion-small-ezkl`
+profile additionally proves the denoising graph with EZKL and can take minutes
+to prepare its proving key. The Gemma profile needs an authorized
 local or Hugging Face checkpoint, so set `POML_MODEL_REF=/path/to/checkpoint`
 for a devnet or use the Python worker's `--model-ref` option and benchmark
 script when the default gated checkpoint is unavailable.
@@ -90,7 +94,9 @@ The decrypt command prints the fixture output as hexadecimal bytes.
    computes a canonical HPKE ciphertext and checks the fixed ticket target.
 6. The first valid hit observed by that miner seals the round.
 7. Completed losing attempts become response transactions in the late suffix.
-8. The worker signs the complete winner statement with the Stage 1 fixture key.
+8. An auxiliary profile validates both VRF transcripts, the hidden output
+   commitment nonce, deterministic HPKE ciphertext and model witness before
+   producing the versioned proof envelope. A ZK profile adds its model proof.
 9. The node validates the complete block through the same path used for peers,
    stores it in Pebble and relays it.
 10. Each peer stores every valid branch and selects the longest valid chain.
@@ -110,6 +116,7 @@ Each implementation area has a short local README.
 | `cmd/pomld` | Long-running node daemon. |
 | `cmd/pomlctl` | Devnet creation, signed query submission, RPC inspection and decryption. |
 | `cmd/pomlworker` | Separate deterministic inference and certificate fixture. |
+| `cmd/pomlproof` | Shared auxiliary witness validator and statement signer used by Python workers. |
 | `stage2/model_worker.py` | Python worker for dummy, small diffusion and Gemma model profiles. |
 | `stage2/proof` | Real EZKL and DeepProve model-proof experiments plus the MobileDiffusion compatibility probe. |
 | `scripts/benchmark_stage2.py` | Constrained model load, timing, memory and device benchmark. |
@@ -117,7 +124,7 @@ Each implementation area has a short local README.
 | `internal/chain` | Block validation, branch storage and fork choice. |
 | `internal/codec` | Canonical transaction, block, ticket and statement bytes. |
 | `internal/consensus` | Exact integer ticket target and boundary checks. |
-| `internal/crypto` | Ed25519, RFC 9381 VRF and deterministic RFC 9180 HPKE profile. |
+| `internal/crypto` | Ed25519, RFC 9381 VRF, hidden output commitments and deterministic RFC 9180 HPKE profile. |
 | `internal/events` | Append-only JSONL experiment ledger. |
 | `internal/miner` | Prefix freeze, independent attempts, first-hit sealing and suffix assembly. |
 | `internal/p2p` | Authenticated TCP peers, discovery, relay and block sync. |
@@ -125,7 +132,8 @@ Each implementation area has a short local README.
 | `internal/rpc` | Local JSON-RPC operator interface. |
 | `internal/state` | Deterministic balances, queries, claims and settlement transitions. |
 | `internal/store` | Pebble persistence for blocks, states, mempool and attempt counters. |
-| `internal/worker` | Replaceable inference and certificate process boundary. |
+| `internal/proof` | Canonical versioned model/binding proof envelope. |
+| `internal/worker` | Replaceable inference and certificate process boundary, including optional model proofs. |
 
 ## Cryptographic profile
 
@@ -178,12 +186,12 @@ user decryption.
 ## Current boundary
 
 The Stage 1 implementation keeps model execution and proof generation behind
-the worker protocol. The Stage 2 worker now supplies deterministic small
-diffusion and adapter-based Gemma outputs. The standalone `stage2/proof`
-commands generate and verify a real small-diffusion EZKL proof and a bounded
-DeepProve Gemma proof. The worker's random proof mode is accepted only by the
-explicitly named `dummy-random-v1` profile. MobileDiffusion and the final
-VRF/HPKE-bound proof bundle remain later work.
+the worker protocol. The Stage 2 worker supplies deterministic small diffusion
+and adapter-based Gemma outputs. The standalone `stage2/proof` commands
+generate and verify real small-diffusion EZKL and bounded DeepProve Gemma
+proofs. The `diffusion-small-ezkl` worker profile carries an EZKL proof after
+setup. The worker's random proof mode is accepted only by the explicitly named
+`dummy-random-v1` profile. MobileDiffusion remains unsupported on this host.
 
 The Stage 2 study and implementation sequence is documented in
 [the model and zero-knowledge proof plan](docs/stage2-model-zkp-plan.md). It
