@@ -13,6 +13,7 @@ import (
 
 	pb "github.com/thomas/poml-node/api/proto"
 	cryptoutil "github.com/thomas/poml-node/internal/crypto"
+	proofutil "github.com/thomas/poml-node/internal/proof"
 	"github.com/thomas/poml-node/internal/worker"
 	"google.golang.org/protobuf/proto"
 )
@@ -38,7 +39,7 @@ func main() {
 	if err := worker.ValidateAuxiliaryWitness(&request); err != nil {
 		fail(err)
 	}
-	if _, err := os.Stdout.Write(cryptoutil.Sign(ed25519.PrivateKey(keyBytes), "certificate", request.Statement)); err != nil {
+	if _, err := os.Stdout.Write(cryptoutil.Sign(ed25519.PrivateKey(keyBytes), "certificate", proofutil.BindingStatement(request.Statement, request.ModelProofInstance))); err != nil {
 		fail(err)
 	}
 }

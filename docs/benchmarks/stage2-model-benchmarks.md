@@ -90,9 +90,11 @@ the public Poseidon commitment was rejected.
 The graph proves the exact denoising core and scheduler. Its conditioning and
 timestep bias maps are private precomputed inputs because the current EZKL
 release rejects the full linear-to-convolution scale transition. The output
-pixels are private and only an EZKL Poseidon hash is public. The final PoML
-proof still needs to bind that hash to the protocol's tagged SHA-256 output
-commitment, ciphertext and VRF transcript.
+pixels are private and only an EZKL Poseidon hash is public. The worker uses
+the circuit's quantized output bytes for the PoML commitment and ciphertext,
+so the auxiliary certificate signs the same public instance. The profile pins
+the tagged digest of `settings.json`, `vk` and `srs` as
+`32f67003d3e5d7062d0811f2811c81353af7a8d13ff534db6e5741424b5c625c`.
 
 ### DeepProve Gemma 3 270M
 
@@ -180,16 +182,18 @@ current CLI decrypt command prints the ciphertext payload as hexadecimal.
 ## What is different from the final paper plan
 
 The implementation now has two proof-bearing profiles. The fast auxiliary
-profile checks the complete host-side transcript. The EZKL profile also carries
-a real model proof, while native peer-side EZKL verification is still being
-integrated.
+profile checks the complete host-side transcript. The EZKL profile evaluates
+the same fixed-point circuit used by the proof, binds its public instance into
+the auxiliary certificate, pins the verifier setup digest and lets every
+configured peer verify the proof by spawning the Python verifier.
 
 On this host, the three-node `diffusion-small-aux` run measured about 5.9 ms
 wall time and 0.6 ms serving-thread CPU time for the winner certificate after
-the model result was available. A cached EZKL attempt proof took about 15.1 s
-after setup. The first EZKL setup used the previously measured roughly 14.1 s
-setup, 2.4 s SRS generation and a temporary prover key of about 2.6 GiB. The
-launcher used logical CPUs 0-15 and no GPU for these measurements.
+the model result was available. A cached EZKL witness used for one ticket took
+0.22–0.24 s and a cached EZKL winner proof took about 15.0 s after setup. The
+first EZKL setup used the previously measured roughly 14.1 s setup, 2.4 s SRS
+generation and a temporary prover key of about 2.6 GiB. The launcher used
+logical CPUs 0-15 and no GPU for these measurements.
 
 - The dummy proof accepts random bytes. The final plan requires a proof of the
   model, VRF, encryption, output commitment, and exact block context.
@@ -205,7 +209,8 @@ launcher used logical CPUs 0-15 and no GPU for these measurements.
 - Go still performs the real RFC 9381 VRF and deterministic RFC 9180 HPKE work.
   The Python worker supplies model output and the temporary proof bytes.
 
-In simple terms, the distributed node can now run the small diffusion model
-with the VRF, commitment and HPKE checks wired into consensus. The EZKL worker
-can carry a real model proof, but the peer-side verifier and MobileDiffusion
-pipeline remain unfinished.
+In simple terms, the distributed node can now run the quantized small
+diffusion circuit, verify the model proof on peers, and check the VRF,
+commitment and HPKE transcript. The circuit still covers the denoising core and
+scheduler. The complete one-circuit paper relation and MobileDiffusion pipeline
+remain unfinished.

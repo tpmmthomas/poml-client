@@ -45,6 +45,7 @@ message WorkerRequest {
   string purpose = 19;  // "winner" or "challenge".
   Witness witness = 20;
   bytes input_commitment = 21;
+  bytes model_proof_instance = 22; // Canonical backend public instance for composed proofs.
 }
 
 // Witness is private input to a future proving process. Stage 1's deterministic

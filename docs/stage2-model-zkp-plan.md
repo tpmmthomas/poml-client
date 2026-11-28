@@ -11,11 +11,13 @@ cryptographic binding relation, proof verification, and migration of the Stage
 This document began as a design study. The repository now contains the first
 Stage 2 execution slice behind the existing private worker protocol. It has a
 dummy backend, a deterministic small diffusion backend, a Gemma adapter, a
-versioned proof envelope, a host-side auxiliary transcript checker, and an
-opt-in EZKL attempt prover. A native peer-side model-proof verifier and the
-final composed binding proof are still future work. The Stage 1 Go node remains
-the reference client and validates the auxiliary statement and envelope
-through the same block path.
+versioned proof envelope, a host-side auxiliary transcript checker, an opt-in
+EZKL attempt prover, and a configured Python peer-side EZKL verifier. The
+current bundle composes the model proof and auxiliary transcript through a
+shared EZKL public instance. A single recursive proof containing all VRF,
+SHA-256 and HPKE arithmetic remains future work. The Stage 1 Go node remains
+the reference client and validates the composed bundle through the same block
+path.
 
 ## Executive decision
 
@@ -1128,8 +1130,9 @@ generated Python protobuf module, constrained launcher, unit tests,
 multi-process devnet runs, and benchmark report are in this repository. M2
 resource-aware scheduling is represented by CPU affinity, Torch thread limits,
 one-model-execution-at-a-time admission, and measured worker fields. It is not
-yet the final memory-token scheduler described above. The native peer-side
-EZKL verifier, Rust binding guest and recursive composition remain M4-M5 work.
+yet the final memory-token scheduler described above. The Go node now has a
+process verifier for the current EZKL profile. The Rust binding guest and
+recursive composition remain M4-M5 work.
 In particular, `dummy-random-v1` is a development escape hatch and carries no
 model or zero-knowledge soundness.
 The small diffusion vector is stable across the tested CPU and `cuda:0` paths.

@@ -8,9 +8,8 @@ dummy, small diffusion and Gemma profiles through the same protobuf boundary.
 
 Stage 1 measures node, network, storage, cryptographic plumbing and ledger
 behaviour. The `*-aux` profiles add the PoML transcript checks and a versioned
-proof envelope. The `diffusion-small-ezkl` profile also carries a real EZKL
-proof, but its setup is expensive and peer-side EZKL verification remains an
-explicit backend integration step.
+proof envelope. The `diffusion-small-ezkl` profile carries a real EZKL proof,
+and configured peers verify it by spawning the pinned Python verifier.
 
 ## Quick start
 
@@ -44,11 +43,18 @@ Pass `--model dummy`, `--model diffusion-small`, `--model diffusion-small-aux`,
 profile. `dummy` is the easiest first run. The small diffusion profile is
 self-contained. The `diffusion-small-aux` profile runs the real model and
 checks the full VRF, commitment and HPKE transcript. The `diffusion-small-ezkl`
-profile additionally proves the denoising graph with EZKL and can take minutes
-to prepare its proving key. The Gemma profile needs an authorized
-local or Hugging Face checkpoint, so set `POML_MODEL_REF=/path/to/checkpoint`
+profile evaluates and proves the denoising graph with EZKL and can take minutes
+to prepare its proving key. Its node config must point at the verifier script
+and a cache containing `settings.json`, `vk` and `srs`. The profile pins a setup
+digest for those three files, so every peer must use the same cache.
+The Gemma profile needs an authorized local or Hugging Face checkpoint, so set
+`POML_MODEL_REF=/path/to/checkpoint`
 for a devnet or use the Python worker's `--model-ref` option and benchmark
 script when the default gated checkpoint is unavailable.
+
+For a local EZKL multi-node run, set `POML_EZKL_CACHE` to a prepared cache
+containing `settings.json`, `vk`, `srs`, `pk`, `model.ezkl` and `model.onnx`.
+The launcher links every node's proof-cache path to that directory.
 
 Submit a signed query through node 0. The query is relayed to the other nodes,
 and any miner can select it after its ordinary transaction prefix is frozen.
@@ -109,6 +115,8 @@ deadline. The node can continue mining while a claim is pending.
 
 The top-level layout is described in [the component guide](docs/architecture.md).
 The consensus-facing Stage 1 rules are summarized in [the protocol boundary](docs/protocol.md).
+The current model-proof boundary and remaining paper gap are summarized in
+[the Stage 2 proof status](docs/stage2-proof-status.md).
 Each implementation area has a short local README.
 
 | Path | Responsibility |
@@ -189,9 +197,12 @@ The Stage 1 implementation keeps model execution and proof generation behind
 the worker protocol. The Stage 2 worker supplies deterministic small diffusion
 and adapter-based Gemma outputs. The standalone `stage2/proof` commands
 generate and verify real small-diffusion EZKL and bounded DeepProve Gemma
-proofs. The `diffusion-small-ezkl` worker profile carries an EZKL proof after
-setup. The worker's random proof mode is accepted only by the explicitly named
-`dummy-random-v1` profile. MobileDiffusion remains unsupported on this host.
+proofs. The `diffusion-small-ezkl` worker evaluates the same fixed-point
+circuit before ticket construction, carries its EZKL proof after setup, and
+lets every configured peer verify its public instance and pinned setup before a
+block is accepted. The worker's random proof mode is accepted only by the
+explicitly named `dummy-random-v1` profile. MobileDiffusion remains unsupported
+on this host.
 
 The Stage 2 study and implementation sequence is documented in
 [the model and zero-knowledge proof plan](docs/stage2-model-zkp-plan.md). It

@@ -139,25 +139,29 @@ func LoadGenesis(path string) (Genesis, error) {
 }
 
 type NodeConfig struct {
-	NodeID             string   `toml:"node_id"`
-	Listen             string   `toml:"listen"`
-	Advertise          string   `toml:"advertise"`
-	Seeds              []string `toml:"seeds"`
-	RPC                string   `toml:"rpc"`
-	RPCToken           string   `toml:"rpc_token"`
-	DataDir            string   `toml:"data_dir"`
-	Genesis            string   `toml:"genesis"`
-	WorkerSocket       string   `toml:"worker_socket"`
-	CertificateSocket  string   `toml:"certificate_socket"`
-	IdentityPrivateHex string   `toml:"identity_private_key_hex"`
-	InferenceVRFHex    string   `toml:"inference_vrf_seed_hex"`
-	EncryptionVRFHex   string   `toml:"encryption_vrf_seed_hex"`
-	CertificatePrivHex string   `toml:"certificate_private_key_hex"`
-	MinerID            string   `toml:"miner_id"`
-	RunID              string   `toml:"run_id"`
-	Mining             bool     `toml:"mining"`
-	MaxAttempts        uint64   `toml:"max_attempts"`
-	AttemptParallelism int      `toml:"attempt_parallelism"`
+	NodeID                   string   `toml:"node_id"`
+	Listen                   string   `toml:"listen"`
+	Advertise                string   `toml:"advertise"`
+	Seeds                    []string `toml:"seeds"`
+	RPC                      string   `toml:"rpc"`
+	RPCToken                 string   `toml:"rpc_token"`
+	DataDir                  string   `toml:"data_dir"`
+	Genesis                  string   `toml:"genesis"`
+	WorkerSocket             string   `toml:"worker_socket"`
+	CertificateSocket        string   `toml:"certificate_socket"`
+	ProofVerifierCommand     []string `toml:"proof_verifier_command"`
+	ProofVerifierProfilesDir string   `toml:"proof_verifier_profiles_dir"`
+	ProofVerifierCacheDir    string   `toml:"proof_verifier_cache_dir"`
+	ProofVerifierTimeoutMS   uint32   `toml:"proof_verifier_timeout_ms"`
+	IdentityPrivateHex       string   `toml:"identity_private_key_hex"`
+	InferenceVRFHex          string   `toml:"inference_vrf_seed_hex"`
+	EncryptionVRFHex         string   `toml:"encryption_vrf_seed_hex"`
+	CertificatePrivHex       string   `toml:"certificate_private_key_hex"`
+	MinerID                  string   `toml:"miner_id"`
+	RunID                    string   `toml:"run_id"`
+	Mining                   bool     `toml:"mining"`
+	MaxAttempts              uint64   `toml:"max_attempts"`
+	AttemptParallelism       int      `toml:"attempt_parallelism"`
 }
 
 func LoadNodeConfig(path string) (NodeConfig, error) {

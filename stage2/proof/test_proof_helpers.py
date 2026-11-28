@@ -41,6 +41,13 @@ class ProofInputTests(unittest.TestCase):
         self.assertTrue(torch.all(condition >= -1.0))
         self.assertTrue(torch.all(condition <= 1.0))
 
+    def test_model_proof_envelope_binds_public_instance(self) -> None:
+        packed, instance = __import__("stage2.proof.ezkl_attempt", fromlist=["pack_model_proof"]).pack_model_proof(
+            b'{"instances":[["field"]],"proof":[]}'
+        )
+        self.assertEqual(packed[:5], b"PMLP\x01")
+        self.assertEqual(instance, b'[["field"]]')
+
 
 if __name__ == "__main__":
     unittest.main()

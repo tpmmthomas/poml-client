@@ -19,6 +19,7 @@ import (
 	pb "github.com/thomas/poml-node/api/proto"
 	"github.com/thomas/poml-node/internal/codec"
 	cryptoutil "github.com/thomas/poml-node/internal/crypto"
+	proofutil "github.com/thomas/poml-node/internal/proof"
 	"github.com/thomas/poml-node/internal/types"
 	"github.com/thomas/poml-node/profiles"
 	"google.golang.org/protobuf/proto"
@@ -159,7 +160,10 @@ func (s FixtureServer) fixtureCertificate(r *pb.WorkerRequest, reply *pb.WorkerR
 			return err
 		}
 	}
-	reply.Certificate = cryptoutil.Sign(s.Certificate, "certificate", r.Statement)
+	// A model-proof profile signs the EZKL public instance together with the
+	// ordinary PoML statement. This is the composition point between the model
+	// proof and the auxiliary VRF/HPKE transcript proof.
+	reply.Certificate = cryptoutil.Sign(s.Certificate, "certificate", proofutil.BindingStatement(r.Statement, r.ModelProofInstance))
 	digest := types.HashBytes("worker-certificate", reply.Certificate)
 	reply.ResultDigest = digest[:]
 	return nil
@@ -255,6 +259,12 @@ func ValidateAuxiliaryWitness(r *pb.WorkerRequest) error {
 	}
 	if len(w.Execution) == 0 {
 		return errors.New("model execution witness is empty")
+	}
+	if strings.HasPrefix(r.CertificateProfile, "zk-") && len(r.ModelProofInstance) == 0 {
+		return errors.New("model proof public instance is empty")
+	}
+	if !strings.HasPrefix(r.CertificateProfile, "zk-") && len(r.ModelProofInstance) != 0 {
+		return errors.New("unexpected model proof public instance")
 	}
 	return nil
 }

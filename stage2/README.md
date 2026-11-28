@@ -4,7 +4,9 @@
 Go node still owns consensus, VRFs, deterministic HPKE encryption, ticket
 selection and block validation. This process receives a validated model
 request and returns canonical output bytes, a binding certificate, and an
-optional model proof object.
+optional model proof object. For the EZKL profile, output bytes come from the
+same fixed-point circuit that is proved, which removes the earlier mismatch
+between ordinary model execution and proof output.
 
 ## Select a backend
 
@@ -41,10 +43,11 @@ profile digest, so a clean install recreates the same reference model.
 
 `diffusion-small-aux` uses the same model and routes proof requests through the
 Go `pomlproof` helper. The helper checks the private PoML transcript before
-signing the proof envelope. `diffusion-small-ezkl` additionally runs
-`ezkl_attempt.py` and puts its verified EZKL proof JSON in the envelope. Its
-first setup can consume several minutes and roughly gigabytes of temporary
-prover-key storage on this host.
+signing the proof envelope. `diffusion-small-ezkl` evaluates the compiled EZKL
+circuit for each attempt, then runs `ezkl_attempt.py` for a winning proof and
+puts its verified EZKL proof JSON in the envelope. Its first setup can consume
+several minutes and several gigabytes of temporary prover-key storage on this
+host.
 
 `gemma3-1b` uses Hugging Face `google/gemma-3-1b-it`, a 512-token input limit
 and at most 16 sampled output tokens. The canonical output is big-endian
@@ -120,9 +123,10 @@ memory, timing and the authorized-checkpoint limitation.
 
 ## Boundary with the final paper
 
-The `aux-ed25519-v1` profile now wires the output commitment, VRF, HPKE and
-block-context binding relation into the Go validator. The `zk-ezkl-diffusion-v1`
-profile also carries a real model proof. A trusted peer-side EZKL verifier and
-the final composed zero-knowledge relation from
-`docs/stage2-model-zkp-plan.md` are still required before that profile is a
-fully trustless model-proof consensus rule.
+The `aux-ed25519-v1` profile wires the output commitment, VRF, HPKE and
+block-context binding relation into the Go validator. The
+`zk-ezkl-diffusion-v1` profile also carries a real model proof, and every
+configured peer invokes the Python EZKL verifier before accepting the block.
+The profile is a composed model proof plus transcript certificate. A single
+zero-knowledge relation that contains the auxiliary SHA-256, ECVRF and HPKE
+arithmetic remains future work.

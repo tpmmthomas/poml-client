@@ -5,12 +5,15 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	pb "github.com/thomas/poml-node/api/proto"
 	"github.com/thomas/poml-node/internal/codec"
 	"github.com/thomas/poml-node/internal/consensus"
 	cryptoutil "github.com/thomas/poml-node/internal/crypto"
+	proofutil "github.com/thomas/poml-node/internal/proof"
 	"github.com/thomas/poml-node/internal/types"
 	"github.com/thomas/poml-node/internal/worker"
 	"github.com/thomas/poml-node/profiles"
@@ -32,7 +35,7 @@ func (m *Miner) attempt(ctx context.Context, parent, prefix types.Hash, q types.
 	w.ProfileDigest = m.config.Model.Digest()
 	if m.config.Model.UsesProofBundle() {
 		w.ProofProfile = m.config.Model.CertificateProfile
-		w.ProofSetupDigest = w.ProfileDigest
+		w.ProofSetupDigest = m.config.Model.SetupDigest()
 	}
 	w.InputCommitment, w.Recipient = q.Commitment, q.Recipient
 	requestID := purpose + "/" + id
@@ -163,7 +166,18 @@ func (m *Miner) certify(ctx context.Context, purpose string, w types.Winner, sta
 	started := time.Now()
 	cert, modelProof, timing, err := m.certifyWorker(ctx, purpose, w, statement, witness)
 	if err == nil && !m.config.Model.AcceptsRandomProof() {
-		err = cryptoutil.Verify(m.config.Genesis.CertificatePublic, cert, "certificate", statement)
+		bindingStatement := statement
+		if strings.HasPrefix(w.ProofProfile, "zk-") {
+			model, decodeErr := proofutil.DecodeModelProof(modelProof)
+			if decodeErr != nil {
+				err = fmt.Errorf("decode model proof envelope: %w", decodeErr)
+			} else {
+				bindingStatement = proofutil.BindingStatement(statement, model.PublicInstance)
+			}
+		}
+		if err == nil {
+			err = cryptoutil.Verify(m.config.Genesis.CertificatePublic, cert, "certificate", bindingStatement)
+		}
 	}
 	fields["wall_ns"], fields["certification_ns"], fields["C_cert"] = time.Since(started).Nanoseconds(), timing.Duration.Nanoseconds(), 1
 	fields["model_proof_bytes"] = len(modelProof)

@@ -9,5 +9,6 @@
   "steps": 4,
   "ticket_weight": 1,
   "max_runtime_ms": 600000,
-  "certificate_profile": "zk-ezkl-diffusion-v1"
+  "certificate_profile": "zk-ezkl-diffusion-v1",
+  "proof_setup_digest": "32f67003d3e5d7062d0811f2811c81353af7a8d13ff534db6e5741424b5c625c"
 }

@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import secrets
+import struct
 import socket
 import subprocess
 import sys
@@ -38,6 +39,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from api.proto import poml_pb2 as pb
+from stage2.proof.ezkl_profile import EZKL_INPUT_SCALE
 
 
 MAX_FRAME_BYTES = 16 * 1024 * 1024
@@ -73,15 +75,17 @@ def profile_digest(profile: dict[str, Any]) -> bytes:
     )
     backend = profile.get("backend", "dummy")
     model_ref = profile.get("model_ref") or profile["id"]
-    return hash_bytes(
-        "worker-profile",
+    parts = [
         profile["id"].encode(),
         backend.encode(),
         model_ref.encode(),
         profile["model_digest"].encode(),
         profile["certificate_profile"].encode(),
-        numbers,
-    )
+    ]
+    if profile.get("proof_setup_digest"):
+        parts.append(profile["proof_setup_digest"].encode())
+    parts.append(numbers)
+    return hash_bytes("worker-profile", *parts)
 
 
 def read_frame(connection: socket.socket) -> bytes:
@@ -381,6 +385,23 @@ class ModelWorker:
             )
             operations = len(request.input) + sum(len(slot) for slot in randomness)
             shape = [len(output)]
+        elif request.certificate_profile == "zk-ezkl-diffusion-v1":
+            if self.profile_path is None or self.proof_cache_dir is None:
+                raise ValueError("EZKL profile needs a proof cache directory")
+            from stage2.proof.ezkl_attempt import evaluate_attempt
+
+            with tempfile.TemporaryDirectory(prefix="inference-", dir=self.proof_cache_dir) as temporary:
+                output, _ = evaluate_attempt(
+                    self.profile_path,
+                    bytes(request.input),
+                    randomness,
+                    self.proof_cache_dir,
+                    Path(temporary),
+                    threads=self.threads,
+                    cpu_start=self.cpu_start,
+                )
+            operations = self.model.parameter_count * self.profile["steps"] if self.model is not None else len(output)
+            shape = [1, 8, 8]
         else:
             assert self.model is not None
             output, operations, shape = self.model.infer(request.input, randomness)
@@ -402,6 +423,35 @@ class ModelWorker:
         elif request.certificate_profile.startswith(("aux-", "zk-")):
             if not self.aux_helper or not self.certificate_key_hex:
                 raise ValueError("an auxiliary proof helper and certificate key are required")
+            if request.certificate_profile == "zk-ezkl-diffusion-v1":
+                if self.profile_path is None or self.proof_cache_dir is None:
+                    raise ValueError("EZKL profile needs a proof cache directory")
+                if self.backend != "diffusion-small":
+                    raise ValueError("EZKL profile requires the small diffusion backend")
+                from stage2.proof.ezkl_attempt import prove_attempt
+
+                if request.witness is None:
+                    raise ValueError("EZKL proof request is missing its witness")
+                proof_input = bytes(request.witness.input)
+                proof_randomness = list(request.witness.randomness)
+                with tempfile.TemporaryDirectory(prefix="attempt-", dir=self.proof_cache_dir) as temporary:
+                    model_proof, _ = prove_attempt(
+                        self.profile_path,
+                        proof_input,
+                        proof_randomness,
+                        self.proof_cache_dir,
+                        Path(temporary),
+                        threads=self.threads,
+                        cpu_start=self.cpu_start,
+                    )
+                response.model_proof = model_proof
+                request.model_proof_instance = model_proof_instance(model_proof)
+                expected_instance = expected_ezkl_instance(bytes(request.witness.output))
+                if request.witness is None or expected_instance != request.model_proof_instance:
+                    raise ValueError(
+                        "EZKL public instance does not match the model output "
+                        f"(expected {expected_instance.decode()}, got {request.model_proof_instance.decode(errors='replace')})"
+                    )
             completed = subprocess.run(
                 [self.aux_helper, "--certificate-private-key-hex", self.certificate_key_hex],
                 input=request.SerializeToString(),
@@ -412,24 +462,6 @@ class ModelWorker:
                 message = completed.stderr.decode("utf-8", errors="replace").strip()
                 raise ValueError(message or "auxiliary proof helper rejected the witness")
             response.certificate = completed.stdout
-            if request.certificate_profile == "zk-ezkl-diffusion-v1":
-                if self.profile_path is None or self.proof_cache_dir is None:
-                    raise ValueError("EZKL profile needs a proof cache directory")
-                if self.backend != "diffusion-small":
-                    raise ValueError("EZKL profile requires the small diffusion backend")
-                from stage2.proof.ezkl_attempt import prove_attempt
-
-                if request.witness is None:
-                    raise ValueError("EZKL proof request is missing its witness")
-                with tempfile.TemporaryDirectory(prefix="attempt-", dir=self.proof_cache_dir) as temporary:
-                    model_proof, _ = prove_attempt(
-                        self.profile_path,
-                        bytes(request.input),
-                        list(request.randomness),
-                        self.proof_cache_dir,
-                        Path(temporary),
-                    )
-                response.model_proof = model_proof
         else:
             raise ValueError(f"unsupported certificate profile {request.certificate_profile!r}")
         response.result_digest = hash_bytes("worker-certificate", response.certificate)
@@ -443,6 +475,40 @@ def expand_bytes(size: int, domain: str, *parts: bytes) -> bytes:
         output.extend(hash_bytes(domain, *parts, counter.to_bytes(4, "big")))
         counter += 1
     return bytes(output[:size])
+
+
+def model_proof_instance(packed: bytes) -> bytes:
+    """Read the public-instance section from the shared PMLP envelope."""
+
+    if len(packed) < 5 or packed[:4] != b"PMLP" or packed[4] != 1:
+        raise ValueError("invalid model proof envelope")
+    offset = 5
+    fields: list[bytes] = []
+    for _ in range(3):
+        if offset + 8 > len(packed):
+            raise ValueError("truncated model proof envelope")
+        size = struct.unpack(">Q", packed[offset : offset + 8])[0]
+        offset += 8
+        end = offset + size
+        if end > len(packed):
+            raise ValueError("model proof envelope field is too large")
+        fields.append(packed[offset:end])
+        offset = end
+    if offset != len(packed) or fields[0] != b"ezkl" or not fields[1] or not fields[2]:
+        raise ValueError("invalid model proof envelope fields")
+    return fields[1]
+
+
+def expected_ezkl_instance(output: bytes) -> bytes:
+    """Recompute the hashed/public EZKL instance for uint8 outputs."""
+
+    import ezkl
+
+    # The circuit uses the profile's fixed-point scale. EZKL hashes the rescaled
+    # output field elements, represented as 32-byte little-endian values.
+    values = [int(value * (1 << EZKL_INPUT_SCALE)).to_bytes(32, "little").hex() for value in output]
+    digest = ezkl.poseidon_hash(values)
+    return json.dumps([digest], sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def load_profile(path: Path, profile_id: str) -> dict[str, Any]:

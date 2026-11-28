@@ -72,6 +72,7 @@ class WorkerTests(unittest.TestCase):
         expected = {
             "dummy": "0ea8e1766be2f45129de53e279c3351b862f3208ce1d4260e74cc1af06fd30fd",
             "diffusion-small": "6f49a544845bfd02ed0696c2db4ca27ecff220a8847d68ea7e7a490d98fccc83",
+            "diffusion-small-ezkl": "c60c1ee21215a473a07cbbcd7dac35ff3482beab287e4dc7da311246670d4cd8",
             "gemma3-1b": "bad1f00d581829f27239e2a8f923a1f31cf4a734bb5eed817507ede94fcccc3b",
         }
         for profile_id, digest in expected.items():

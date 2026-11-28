@@ -197,6 +197,7 @@ type WorkerRequest struct {
 	Purpose            string                 `protobuf:"bytes,19,opt,name=purpose,proto3" json:"purpose,omitempty"` // "winner" or "challenge".
 	Witness            *Witness               `protobuf:"bytes,20,opt,name=witness,proto3" json:"witness,omitempty"`
 	InputCommitment    []byte                 `protobuf:"bytes,21,opt,name=input_commitment,json=inputCommitment,proto3" json:"input_commitment,omitempty"`
+	ModelProofInstance []byte                 `protobuf:"bytes,22,opt,name=model_proof_instance,json=modelProofInstance,proto3" json:"model_proof_instance,omitempty"` // Canonical backend public instance for composed proofs.
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -374,6 +375,13 @@ func (x *WorkerRequest) GetWitness() *Witness {
 func (x *WorkerRequest) GetInputCommitment() []byte {
 	if x != nil {
 		return x.InputCommitment
+	}
+	return nil
+}
+
+func (x *WorkerRequest) GetModelProofInstance() []byte {
+	if x != nil {
+		return x.ModelProofInstance
 	}
 	return nil
 }
@@ -705,7 +713,7 @@ const file_api_proto_poml_proto_rawDesc = "" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eWORKER_REQUEST\x10\n" +
 	"\x12\x13\n" +
-	"\x0fWORKER_RESPONSE\x10\v\"\x04\b\x01\x10\t\"\x04\b\f\x10\f\"\x8d\x06\n" +
+	"\x0fWORKER_RESPONSE\x10\v\"\x04\b\x01\x10\t\"\x04\b\f\x10\f\"\xbf\x06\n" +
 	"\rWorkerRequest\x12/\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1b.poml.v1.WorkerRequest.KindR\x04kind\x12\x1d\n" +
 	"\n" +
@@ -734,7 +742,8 @@ const file_api_proto_poml_proto_rawDesc = "" +
 	"\x13certificate_profile\x18\x12 \x01(\tR\x12certificateProfile\x12\x18\n" +
 	"\apurpose\x18\x13 \x01(\tR\apurpose\x12*\n" +
 	"\awitness\x18\x14 \x01(\v2\x10.poml.v1.WitnessR\awitness\x12)\n" +
-	"\x10input_commitment\x18\x15 \x01(\fR\x0finputCommitment\"<\n" +
+	"\x10input_commitment\x18\x15 \x01(\fR\x0finputCommitment\x120\n" +
+	"\x14model_proof_instance\x18\x16 \x01(\fR\x12modelProofInstance\"<\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tINFERENCE\x10\x01\x12\x0f\n" +

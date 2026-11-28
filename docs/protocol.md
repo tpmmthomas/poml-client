@@ -74,8 +74,19 @@ The exact Go dependencies and versions are pinned in `go.mod`. The
 proves that the local prover checked the worker witness, both VRFs, the output
 commitment and deterministic HPKE ciphertext before signing. It is not itself a
 zero-knowledge proof. The `zk-ezkl-diffusion-v1` profile carries a real EZKL
-model proof in the same envelope, while a native peer-side EZKL verifier is a
-separate backend adapter.
+model proof in the same envelope. Its `PMLP` model-proof envelope exposes the
+canonical EZKL public instance, and the auxiliary certificate signs that same
+instance. Every configured peer invokes `stage2/proof/verify_ezkl.py` before
+accepting the block.
+
+The two proof layers are therefore composed through a shared public instance.
+The model proof establishes the diffusion computation for that instance. The
+auxiliary certificate establishes the VRF, commitment, HPKE and block-context
+transcript for the same instance. This is independently checkable by peers,
+but it is still a composed proof. For the EZKL profile, the worker obtains the
+canonical output bytes from the circuit witness before it computes the ticket.
+The current EZKL circuit does not yet place
+SHA-256, ECVRF and HPKE arithmetic inside the EZKL circuit itself.
 
 ## Replaceable worker boundary
 

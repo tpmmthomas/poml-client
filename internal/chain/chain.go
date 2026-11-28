@@ -21,13 +21,14 @@ import (
 )
 
 type Chain struct {
-	mu        sync.RWMutex
-	genesis   profile.Genesis
-	store     *store.Store
-	events    *events.Writer
-	tip       types.Hash
-	tipHeight uint64
-	arrival   map[types.Hash]time.Time
+	mu            sync.RWMutex
+	genesis       profile.Genesis
+	store         *store.Store
+	events        *events.Writer
+	modelVerifier proofutil.ModelVerifier
+	tip           types.Hash
+	tipHeight     uint64
+	arrival       map[types.Hash]time.Time
 }
 
 type Result struct {
@@ -38,10 +39,16 @@ type Result struct {
 	AttachedTxs []types.Tx
 }
 
-func Open(genesis profile.Genesis, durable *store.Store, eventWriter *events.Writer) (*Chain, error) {
+func Open(genesis profile.Genesis, durable *store.Store, eventWriter *events.Writer, verifiers ...proofutil.ModelVerifier) (*Chain, error) {
 	chain := &Chain{
 		genesis: genesis, store: durable, events: eventWriter,
 		tip: genesis.Hash, arrival: make(map[types.Hash]time.Time),
+	}
+	if len(verifiers) > 1 {
+		return nil, errors.New("multiple model proof verifiers configured")
+	}
+	if len(verifiers) == 1 {
+		chain.modelVerifier = verifiers[0]
 	}
 	storedGenesis, genesisErr := durable.Genesis()
 	if genesisErr == nil && storedGenesis != genesis.Hash {
@@ -318,7 +325,7 @@ func (c *Chain) validateBlock(block types.Block, blockID types.Hash, parent type
 		return fmt.Errorf("winner VRF: %w", err)
 	}
 	if c.genesis.Raw.Model.UsesProofBundle() {
-		if winner.ProofProfile != c.genesis.Raw.Model.CertificateProfile || winner.ProofSetupDigest != c.genesis.Raw.Model.Digest() {
+		if winner.ProofProfile != c.genesis.Raw.Model.CertificateProfile || winner.ProofSetupDigest != c.genesis.Raw.Model.SetupDigest() {
 			return errors.New("winner proof profile or setup digest mismatch")
 		}
 		expectedEncryptionInput := types.HashBytes("encryption-input", attemptInput)
@@ -350,7 +357,7 @@ func (c *Chain) validateBlock(block types.Block, blockID types.Hash, parent type
 		if len(winner.Certificate) != 0 {
 			return errors.New("auxiliary winner still carries a legacy certificate")
 		}
-		if _, err := proofutil.VerifyBundle(winner.ProofBundle, winner.ProofProfile, winner.ProofSetupDigest, codec.WinnerStatement(block), c.genesis.CertificatePublic); err != nil {
+		if _, err := proofutil.VerifyBundle(winner.ProofBundle, winner.ProofProfile, winner.ProofSetupDigest, codec.WinnerStatement(block), c.genesis.CertificatePublic, c.modelVerifier); err != nil {
 			return fmt.Errorf("winner proof bundle: %w", err)
 		}
 	} else if err := cryptoutil.Verify(c.genesis.CertificatePublic, winner.Certificate, "certificate", codec.WinnerStatement(block)); err != nil {

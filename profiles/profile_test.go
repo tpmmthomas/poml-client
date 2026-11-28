@@ -63,6 +63,13 @@ func TestStage2ProfilesAndProofMode(t *testing.T) {
 			t.Fatalf("invalid proof-bearing profile %s", id)
 		}
 	}
+	zk, err := Load("diffusion-small-ezkl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if zk.ProofSetupDigest == "" || zk.SetupDigest() == zk.Digest() {
+		t.Fatal("EZKL profile did not pin a separate proof setup digest")
+	}
 	fixture, err := Fixture("fixture-a")
 	if err != nil {
 		t.Fatal(err)

@@ -21,8 +21,15 @@ import sys
 print(json.load(open(sys.argv[1], encoding="utf-8")).get("backend", "dummy"))
 PY
 )
+proof_profile=$(python3 - "$repo_dir/profiles/$model_id.json" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1], encoding="utf-8")).get("certificate_profile", ""))
+PY
+)
 worker_count=$(find "$run_dir" -maxdepth 1 -name 'node-*.toml' -type f | wc -l)
 cpu_budget=$(( $(nproc) / 2 ))
+[ "$cpu_budget" -lt 1 ] && cpu_budget=1
 process_cpu_set="0-$((cpu_budget - 1))"
 worker_threads=$((cpu_budget / worker_count))
 [ "$worker_threads" -lt 1 ] && worker_threads=1
@@ -47,6 +54,30 @@ certificate_key=$(awk -F' = ' '$1 == "certificate_private_key_hex" {gsub(/"/, ""
 if [ -z "$certificate_key" ]; then
   echo "node-0.toml has no certificate_private_key_hex" >&2
   exit 1
+fi
+
+if [[ "$proof_profile" == zk-* ]]; then
+  proof_cache_source="${POML_EZKL_CACHE:-}"
+  if [ -n "$proof_cache_source" ] && [ ! -d "$proof_cache_source" ]; then
+    echo "POML_EZKL_CACHE is not a directory: $proof_cache_source" >&2
+    exit 1
+  fi
+  for config in "$run_dir"/node-*.toml; do
+    [ -e "$config" ] || continue
+    node_index=$(basename "$config" | sed -E 's/node-([0-9]+)\.toml/\1/')
+    cache_path="$run_dir/proof-cache-$node_index"
+    if [ -n "$proof_cache_source" ] && [ ! -e "$cache_path" ]; then
+      ln -s "$proof_cache_source" "$cache_path"
+    fi
+    if ! grep -q '^proof_verifier_command' "$config"; then
+      cat >>"$config" <<EOF
+proof_verifier_command = ["$python_bin", "$repo_dir/stage2/proof/verify_ezkl.py"]
+proof_verifier_profiles_dir = "$repo_dir/profiles"
+proof_verifier_cache_dir = "$run_dir/proof-cache-$node_index"
+proof_verifier_timeout_ms = 120000
+EOF
+    fi
+  done
 fi
 
 for config in "$run_dir"/node-*.toml; do

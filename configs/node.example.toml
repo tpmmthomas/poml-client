@@ -9,6 +9,11 @@ data_dir = "run/node-0"
 genesis = "genesis.json"
 worker_socket = "run/worker-0.sock"
 # certificate_socket = "run/prover-0.sock"  # optional separate certificate worker
+# zk profiles require a verifier process and the matching setup cache.
+# proof_verifier_command = ["/path/to/python", "/path/to/poml-node/stage2/proof/verify_ezkl.py"]
+# proof_verifier_profiles_dir = "/path/to/poml-node/profiles"
+# proof_verifier_cache_dir = "run/proof-cache-0"
+# proof_verifier_timeout_ms = 120000
 identity_private_key_hex = "64-byte-ed25519-private-key"
 inference_vrf_seed_hex = "32-byte-seed"
 encryption_vrf_seed_hex = "32-byte-seed"

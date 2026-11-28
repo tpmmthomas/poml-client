@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"time"
 
 	pb "github.com/thomas/poml-node/api/proto"
@@ -165,7 +166,11 @@ func (c Client) call(ctx context.Context, request *pb.WorkerRequest) (*pb.Worker
 		return nil, errors.New("reported worker time exceeds the request budget")
 	}
 	if !response.Ok {
-		return nil, errors.New("worker rejected the request")
+		message := strings.TrimSpace(response.Error)
+		if message == "" {
+			message = "worker rejected the request"
+		}
+		return nil, errors.New(message)
 	}
 	return &response, nil
 }

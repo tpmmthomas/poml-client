@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/thomas/poml-node/internal/chain"
 	"github.com/thomas/poml-node/internal/codec"
@@ -18,6 +20,7 @@ import (
 	"github.com/thomas/poml-node/internal/miner"
 	"github.com/thomas/poml-node/internal/p2p"
 	"github.com/thomas/poml-node/internal/profile"
+	proofutil "github.com/thomas/poml-node/internal/proof"
 	"github.com/thomas/poml-node/internal/rpc"
 	"github.com/thomas/poml-node/internal/state"
 	"github.com/thomas/poml-node/internal/store"
@@ -102,7 +105,21 @@ func Open(configPath string) (*Node, error) {
 		_ = eventWriter.Close()
 		return nil, err
 	}
-	chainState, err := chain.Open(genesis, durable, eventWriter)
+	var modelVerifier proofutil.ModelVerifier
+	if strings.HasPrefix(genesis.Raw.Model.CertificateProfile, "zk-") {
+		if len(config.ProofVerifierCommand) == 0 || config.ProofVerifierProfilesDir == "" || config.ProofVerifierCacheDir == "" {
+			_ = durable.Close()
+			_ = eventWriter.Close()
+			return nil, errors.New("zk model profile requires proof_verifier_command")
+		}
+		modelVerifier = proofutil.ProcessVerifier{
+			Command: config.ProofVerifierCommand, ModelProfileID: genesis.Raw.ModelProfileID,
+			ProfilesDir: resolvePath(baseDir, config.ProofVerifierProfilesDir),
+			CacheDir:    resolvePath(baseDir, config.ProofVerifierCacheDir),
+			Timeout:     time.Duration(config.ProofVerifierTimeoutMS) * time.Millisecond,
+		}
+	}
+	chainState, err := chain.Open(genesis, durable, eventWriter, modelVerifier)
 	if err != nil {
 		_ = durable.Close()
 		_ = eventWriter.Close()

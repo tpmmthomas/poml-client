@@ -27,12 +27,18 @@ type Spec struct {
 	TicketWeight       uint64 `json:"ticket_weight"`
 	MaxRuntimeMS       uint32 `json:"max_runtime_ms"`
 	CertificateProfile string `json:"certificate_profile"`
+	ProofSetupDigest   string `json:"proof_setup_digest,omitempty"`
 }
 
 // Validate bounds computation before the scheduler or verifier accepts the profile.
 func (s Spec) Validate() error {
 	if s.ID == "" || s.CertificateProfile == "" {
 		return errors.New("model and certificate profile IDs are required")
+	}
+	if strings.HasPrefix(s.CertificateProfile, "zk-") {
+		if _, err := types.ParseHash(s.ProofSetupDigest); err != nil {
+			return fmt.Errorf("proof setup digest: %w", err)
+		}
 	}
 	if _, err := types.ParseHash(s.ModelDigest); err != nil {
 		return fmt.Errorf("model digest: %w", err)
@@ -65,7 +71,23 @@ func (s Spec) Digest() types.Hash {
 	if modelRef == "" {
 		modelRef = s.ID
 	}
-	return types.HashBytes("worker-profile", []byte(s.ID), []byte(s.BackendName()), []byte(modelRef), []byte(s.ModelDigest), []byte(s.CertificateProfile), numbers)
+	parts := [][]byte{[]byte(s.ID), []byte(s.BackendName()), []byte(modelRef), []byte(s.ModelDigest), []byte(s.CertificateProfile)}
+	if s.ProofSetupDigest != "" {
+		parts = append(parts, []byte(s.ProofSetupDigest))
+	}
+	parts = append(parts, numbers)
+	return types.HashBytes("worker-profile", parts...)
+}
+
+// SetupDigest is the consensus digest for the proof verifier artifacts. A
+// legacy auxiliary profile uses its worker profile digest because it has no
+// external circuit setup.
+func (s Spec) SetupDigest() types.Hash {
+	if s.ProofSetupDigest != "" {
+		digest, _ := types.ParseHash(s.ProofSetupDigest)
+		return digest
+	}
+	return s.Digest()
 }
 
 // BackendName is the executable worker selected by this profile. Empty values

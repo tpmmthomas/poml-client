@@ -12,15 +12,17 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strings"
 
 	cryptoutil "github.com/thomas/poml-node/internal/crypto"
 	"github.com/thomas/poml-node/internal/types"
 )
 
 const (
-	formatVersion = byte(1)
-	maxBundleSize = 16 << 20
-	maxPartSize   = 16 << 20
+	formatVersion      = byte(1)
+	maxBundleSize      = 16 << 20
+	maxPartSize        = 16 << 20
+	modelFormatVersion = byte(1)
 )
 
 // Bundle is the canonical proof object carried in a winner block.
@@ -30,6 +32,73 @@ type Bundle struct {
 	StatementHash types.Hash
 	ModelProof    []byte
 	BindingProof  []byte
+}
+
+// ModelProof is the backend-specific model proof carried inside a bundle.
+// PublicInstance is a canonical serialization of the proof backend's public
+// instances. It is signed by the auxiliary binding proof so the model proof
+// and the PoML ciphertext cannot be swapped independently.
+type ModelProof struct {
+	Backend        string
+	PublicInstance []byte
+	Proof          []byte
+}
+
+// BindingStatement returns the exact bytes signed by the auxiliary proof
+// worker. Legacy profiles sign only statement. Model-proof profiles append a
+// length-delimited public instance to bind the two proof layers together.
+func BindingStatement(statement, publicInstance []byte) []byte {
+	if len(publicInstance) == 0 {
+		return append([]byte(nil), statement...)
+	}
+	var output bytes.Buffer
+	output.WriteString("poml-proof-binding/v1")
+	writeBytes(&output, statement)
+	writeBytes(&output, publicInstance)
+	return output.Bytes()
+}
+
+// EncodeModelProof creates the bounded envelope used inside Bundle.ModelProof.
+func EncodeModelProof(model ModelProof) ([]byte, error) {
+	if model.Backend == "" || len(model.PublicInstance) == 0 || len(model.Proof) == 0 {
+		return nil, errors.New("model proof is incomplete")
+	}
+	if len(model.Backend) > maxPartSize || len(model.PublicInstance) > maxPartSize || len(model.Proof) > maxPartSize {
+		return nil, errors.New("model proof part is too large")
+	}
+	var output bytes.Buffer
+	output.WriteString("PMLP")
+	output.WriteByte(modelFormatVersion)
+	writeBytes(&output, []byte(model.Backend))
+	writeBytes(&output, model.PublicInstance)
+	writeBytes(&output, model.Proof)
+	if output.Len() > maxBundleSize {
+		return nil, errors.New("model proof is too large")
+	}
+	return output.Bytes(), nil
+}
+
+// DecodeModelProof parses the backend envelope. Backend verification is kept
+// in a separate verifier because EZKL and future proof systems have different
+// runtimes and setup artifacts.
+func DecodeModelProof(encoded []byte) (ModelProof, error) {
+	if len(encoded) == 0 || len(encoded) > maxBundleSize {
+		return ModelProof{}, errors.New("invalid model proof size")
+	}
+	reader := &bundleReader{data: encoded}
+	if string(reader.take(4)) != "PMLP" || reader.byte() != modelFormatVersion {
+		return ModelProof{}, errors.New("unsupported model proof version")
+	}
+	backend := reader.bytes()
+	instance := reader.bytes()
+	proof := reader.bytes()
+	if reader.err != nil {
+		return ModelProof{}, reader.err
+	}
+	if reader.pos != len(encoded) || len(backend) == 0 || len(instance) == 0 || len(proof) == 0 {
+		return ModelProof{}, errors.New("invalid model proof envelope")
+	}
+	return ModelProof{Backend: string(backend), PublicInstance: instance, Proof: proof}, nil
 }
 
 // StatementDigest returns the domain-separated digest used by every proof
@@ -91,12 +160,10 @@ func Decode(encoded []byte) (Bundle, error) {
 		ModelProof: modelProof, BindingProof: bindingProof}, nil
 }
 
-// VerifyBundle checks the common certificate-backed profile. The profile is a
-// transitional integration point for real model proofs: the model proof bytes
-// are carried and hashed in the block, while the binding certificate is still
-// verified with the genesis key. A ZK backend can replace this verifier while
-// keeping the same envelope and statement bytes.
-func VerifyBundle(encoded []byte, expectedProfile string, expectedSetup types.Hash, statement []byte, certificatePublic []byte) (Bundle, error) {
+// VerifyBundle checks the common certificate-backed profile. A ZK model proof
+// is verified through the configured backend hook after its binding
+// certificate passes. The envelope and statement bytes remain backend-neutral.
+func VerifyBundle(encoded []byte, expectedProfile string, expectedSetup types.Hash, statement []byte, certificatePublic []byte, verifiers ...ModelVerifier) (Bundle, error) {
 	bundle, err := Decode(encoded)
 	if err != nil {
 		return Bundle{}, err
@@ -107,10 +174,43 @@ func VerifyBundle(encoded []byte, expectedProfile string, expectedSetup types.Ha
 	if bundle.StatementHash != StatementDigest(statement) {
 		return Bundle{}, errors.New("proof statement digest mismatch")
 	}
-	if err := cryptoutil.Verify(certificatePublic, bundle.BindingProof, "certificate", statement); err != nil {
+	publicInstance := []byte(nil)
+	var model ModelProof
+	if strings.HasPrefix(expectedProfile, "zk-") {
+		model, err = DecodeModelProof(bundle.ModelProof)
+		if err != nil {
+			return Bundle{}, fmt.Errorf("model proof envelope: %w", err)
+		}
+		if expectedBackend := backendForProfile(expectedProfile); expectedBackend != "" && model.Backend != expectedBackend {
+			return Bundle{}, fmt.Errorf("model proof backend %q does not match %q", model.Backend, expectedBackend)
+		}
+		publicInstance = model.PublicInstance
+		if len(verifiers) != 1 || verifiers[0] == nil {
+			return Bundle{}, errors.New("model proof verifier is unavailable")
+		}
+	}
+	if err := cryptoutil.Verify(certificatePublic, bundle.BindingProof, "certificate", BindingStatement(statement, publicInstance)); err != nil {
 		return Bundle{}, fmt.Errorf("binding proof: %w", err)
 	}
+	if strings.HasPrefix(expectedProfile, "zk-") {
+		// Verify the certificate before invoking an external verifier. A peer
+		// must not spend proof-verification resources on an unsigned bundle.
+		if err := verifiers[0].Verify(expectedProfile, expectedSetup, model); err != nil {
+			return Bundle{}, fmt.Errorf("model proof verification: %w", err)
+		}
+	}
 	return bundle, nil
+}
+
+func backendForProfile(profile string) string {
+	switch {
+	case strings.HasPrefix(profile, "zk-ezkl-"):
+		return "ezkl"
+	case strings.HasPrefix(profile, "zk-deepprove-"):
+		return "deepprove"
+	default:
+		return ""
+	}
 }
 
 func writeBytes(output *bytes.Buffer, value []byte) {

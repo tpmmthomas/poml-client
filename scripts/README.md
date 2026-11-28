@@ -16,6 +16,13 @@ Set `POML_MODEL_REF` to a local checkpoint when a profile's default Hugging
 Face reference is unavailable. This override is for adapter testing. Freeze a
 real weight-manifest digest before using it as a consensus model profile.
 
+For `zk-ezkl-diffusion-v1`, the launcher also adds a Python peer verifier to
+each generated node config. Each verifier uses that node's proof cache. The
+cache must contain the same EZKL settings, verification key and SRS before a
+peer can accept a proof-bearing block. Set `POML_EZKL_CACHE` to a prepared
+cache directory to reuse one pinned setup across a local multi-node run. The
+launcher creates a symlink for each node when that path is supplied.
+
 `stop_devnet.sh` stops those processes and waits for them to exit.
 `smoke_test.sh` creates a three-node fixture run, submits two queries, checks
 height-2 convergence and decrypts the winning output. `benchmark_stage2.py`

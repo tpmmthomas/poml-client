@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/thomas/poml-node/internal/codec"
@@ -55,13 +56,15 @@ func (m *Miner) publish(ctx context.Context, r miningRound, winner attemptResult
 	block.Winner.Certificate = cert
 	if m.config.Model.UsesProofBundle() {
 		if len(modelProof) == 0 {
-			// The Go fixture predates the optional model-proof response field.
-			// Keep its execution token in the envelope until a real model
-			// backend supplies a proof object.
+			if strings.HasPrefix(w.ProofProfile, "zk-") {
+				return errors.New("model-proof profile returned no model proof")
+			}
+			// Auxiliary-only profiles retain an opaque execution token for
+			// observability. Their binding certificate remains the proof.
 			modelProof = winner.witness.Execution
 		}
 		bundle, bundleErr := proofutil.Encode(proofutil.Bundle{
-			ProfileID: m.config.Model.CertificateProfile, SetupDigest: m.config.Model.Digest(),
+			ProfileID: m.config.Model.CertificateProfile, SetupDigest: w.ProofSetupDigest,
 			StatementHash: proofutil.StatementDigest(codec.WinnerStatement(block)),
 			ModelProof:    modelProof, BindingProof: cert,
 		})
